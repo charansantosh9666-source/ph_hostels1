@@ -1,0 +1,770 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title data-translate="dashboard_title">Dashboard - Co-Live Hub</title>
+    <!-- Gesture Recognition Libraries -->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-converter"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/handpose"></script>
+    <script src="https://cdn.jsdelivr.net/npm/fingerpose@0.1.0/dist/fingerpose.min.js"></script>
+
+    <style>
+        :root {
+            --bg-color: #f4f7f6;
+            --widget-bg: white;
+            --text-color: #333;
+            --header-bg: #2c3e50;
+            --sidebar-bg: #34495e;
+            --accent-color: #1abc9c;
+            --border-color: #ecf0f1;
+        }
+
+        body.dark-theme {
+            --bg-color: #2c3e50;
+            --widget-bg: #34495e;
+            --text-color: #ecf0f1;
+            --header-bg: #1a252f;
+            --sidebar-bg: #2c3e50;
+            --accent-color: #1abc9c;
+            --border-color: #4a627a;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            margin: 0;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            transition: background-color 0.3s, color 0.3s;
+        }
+
+        .header {
+            background: var(--header-bg);
+            color: white;
+            padding: 10px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            border-bottom: 1px solid var(--border-color);
+            z-index: 1000;
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+        }
+
+        .header .logo {
+            font-weight: bold;
+            font-size: 1.5em;
+        }
+
+        .main-container {
+            display: flex;
+        }
+
+        .sidebar {
+            width: 220px;
+            background: var(--sidebar-bg);
+            height: 100vh;
+            transition: transform 0.3s ease-in-out;
+        }
+
+        body.sidebar-collapsed .sidebar {
+            width: 80px;
+        }
+
+        .sidebar ul {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .sidebar a {
+            display: block;
+            padding: 15px 20px;
+            color: white;
+            text-decoration: none;
+            border-bottom: 1px solid var(--header-bg);
+            transition: background 0.3s;
+        }
+
+        body.sidebar-collapsed .sidebar a {
+            text-align: center;
+        }
+
+        .sidebar a:hover, .sidebar a.active {
+            background: var(--accent-color);
+        }
+
+        .content {
+            flex-grow: 1;
+            padding: 30px;
+            transition: margin-left 0.3s ease-in-out;
+        }
+
+        body.sidebar-collapsed .content {
+            margin-left: -140px; /* 220px (original width) - 80px (collapsed width) */
+        }
+
+        .widget {
+            background: var(--widget-bg);
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+
+        .widget h2 {
+            margin-top: 0;
+            border-bottom: 2px solid var(--border-color);
+            padding-bottom: 10px;
+            color: var(--text-color);
+        }
+
+        .widget p {
+            line-height: 1.6;
+            font-size: 1rem;
+            color: var(--text-color);
+        }
+
+        .widget {
+            animation: fadeIn 0.5s ease-in-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        #mic-btn {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 1.5em;
+            cursor: pointer;
+            margin-left: 15px;
+        }
+        #mic-btn.listening {
+            color: #e74c3c;
+            animation: pulse 1.5s infinite;
+        }
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.2); }
+            100% { transform: scale(1); }
+        }
+
+        #gesture-indicator {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            font-size: 3em;
+            opacity: 0;
+            transition: opacity 0.5s, transform 0.5s;
+        }
+
+        #gesture-video {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            width: 160px;
+            height: 120px; /* Maintain 4:3 aspect ratio */
+            border: 3px solid var(--accent-color);
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+            transform: scaleX(-1); /* Mirror view for intuitive movement */
+            object-fit: cover;
+            z-index: 2001; /* Ensure it's on top */
+        }
+
+        #language-selector {
+            background-color: var(--sidebar-bg);
+            color: white;
+            border: 1px solid var(--border-color);
+            border-radius: 5px;
+            padding: 5px;
+            margin-left: 15px;
+            font-family: inherit;
+            cursor: pointer;
+        }
+
+        .sidebar-toggle, #theme-toggle {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 1.5em;
+            cursor: pointer;
+            margin-right: 15px;
+        }
+
+        #theme-toggle {
+            margin-right: 0;
+            margin-left: 15px;
+        }
+
+        .sidebar-toggle {
+            /* Always visible */
+        }
+
+        .nav-icon {
+            margin-right: 10px;
+            font-size: 1.1em;
+        }
+
+        body.sidebar-collapsed .sidebar .nav-icon {
+            margin-right: 0;
+        }
+
+        body.sidebar-collapsed .sidebar a span:not(.nav-icon) {
+            display: none;
+        }
+
+        /* Responsive Styles */
+        @media (max-width: 768px) {
+            .main-container {
+                flex-direction: column;
+            }
+            .sidebar {
+                position: fixed;
+                left: 0;
+                top: 0;
+                height: 100%;
+                transform: translateX(-100%);
+                z-index: 1001;
+            }
+            .sidebar.open {
+                transform: translateX(0);
+            }
+            .sidebar-toggle {
+                display: block; /* Shown on mobile */
+            }
+            .content {
+                padding: 20px;
+            }
+        }
+
+        /* ---------------------------------------------------
+           UI HOVER / ANIMATION ENHANCEMENTS
+        ----------------------------------------------------- */
+
+        /* Sidebar Hover Glow */
+        .sidebar a {
+            position: relative;
+            transition: background 0.25s ease, transform 0.25s;
+        }
+        .sidebar a:hover {
+            background: var(--accent-color);
+            transform: translateX(6px);
+        }
+
+        /* Button Hover */
+        button {
+            transition: transform 0.25s, box-shadow 0.25s;
+        }
+        button:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 6px 14px rgba(0,0,0,0.2);
+        }
+
+        /* Widget Card Animation */
+        .widget {
+            animation: fadeIn 0.6s ease-out;
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+        .widget:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 22px rgba(0,0,0,0.15);
+        }
+
+        /* Active Navigation Indicator */
+        .sidebar a.active::before {
+            content: "";
+            position: absolute;
+            left: 0;
+            top: 0;
+            height: 100%;
+            width: 6px;
+            background: var(--accent-color);
+            border-radius: 0 4px 4px 0;
+        }
+
+    </style>
+</head>
+<body>
+
+    <script>
+        // Protect this page: if the user is not logged in, redirect to login.html
+        if (sessionStorage.getItem('isLoggedIn') !== 'true') {
+            window.location.href = 'login.html';
+        }
+    </script>
+
+    <div class="header">
+        <div class="header-left">
+            <button class="sidebar-toggle" id="sidebar-toggle">☰</button>
+            <div class="logo" data-translate="app_title">Co-Live Hub</div>
+        </div>
+        <div style="display: flex; align-items: center;">
+            <span id="username-display" data-translate="welcome_message">Welcome, Alex!</span>
+            <button id="theme-toggle">🌙</button>
+            <button id="mic-btn">🎤</button>
+            <select id="language-selector">
+                <option value="en">English</option>
+                <option value="es">Español</option>
+                <option value="hi">हिन्दी</option>
+                <option value="te">తెలుగు</option>
+            </select>
+        </div>
+    </div>
+    
+    <!-- Hidden video element for gesture detection -->
+    <video id="gesture-video" playsinline></video>
+    <div id="gesture-indicator"></div>
+
+    <div class="main-container">
+        <nav class="sidebar" id="sidebar">
+            <ul>
+                <li><a href="dashboard.html" class="active"><span class="nav-icon">📊</span><span data-translate="nav_dashboard">Dashboard</span></a></li>
+                <li><a href="rent-bills.html"><span class="nav-icon">💰</span><span data-translate="nav_rent_bills">Rent & Bills</span></a></li>
+                <li><a href="chore-schedule.html"><span class="nav-icon">🧹</span><span data-translate="nav_chore_schedule">Chore Schedule</span></a></li>
+                <li><a href="ai-assistant.html"><span class="nav-icon">🤖</span><span data-translate="nav_ai_assistant">AI Assistant</span></a></li>
+                <li><a href="expense-tracker.html"><span class="nav-icon">🧾</span><span data-translate="nav_expense_tracker">Expense Tracker</span></a></li>
+                <li><a href="guest-log.html"><span class="nav-icon">👥</span><span data-translate="nav_guest_log">Guest Log</span></a></li>
+                <li><a href="maintenance.html"><span class="nav-icon">🔧</span><span data-translate="nav_maintenance">Maintenance</span></a></li>
+                <li><a href="settings.html"><span class="nav-icon">⚙️</span><span data-translate="nav_settings">Settings</span></a></li>
+                <li><a href="logout.html"><span class="nav-icon">🚪</span><span data-translate="nav_logout">Logout</span></a></li>
+            </ul>
+        </nav>
+        <!-- This container will hold the correct dashboard content -->
+        <div id="dashboard-content-wrapper"></div>
+    </div>
+
+    <script>
+        const sidebarToggle = document.getElementById('sidebar-toggle');
+        const sidebar = document.getElementById('sidebar');
+        const themeToggle = document.getElementById('theme-toggle');
+        const langSelector = document.getElementById('language-selector');
+
+        const translations = {
+            en: {
+                dashboard_title: "Dashboard - Co-Live Hub",
+                app_title: "Co-Live Hub",
+                welcome_message: "Welcome, {username}!",
+                nav_dashboard: "Dashboard",
+                nav_rent_bills: "Rent & Bills",
+                nav_chore_schedule: "Chore Schedule",
+                nav_expense_tracker: "Expense Tracker",
+                nav_ai_assistant: "AI Assistant",
+                nav_guest_log: "Guest Log",
+                nav_maintenance: "Maintenance",
+                nav_settings: "Settings",
+                nav_logout: "Logout",
+                upcoming_bills_title: "Upcoming Bills",
+                chores_this_week_title: "Your Chores This Week",
+                recent_maintenance_title: "Recent Maintenance Requests",
+            },
+            es: {
+                dashboard_title: "Tablero - Co-Live Hub",
+                app_title: "Co-Live Hub",
+                welcome_message: "¡Bienvenido, {username}!",
+                nav_dashboard: "Tablero",
+                nav_rent_bills: "Alquiler y Cuentas",
+                nav_chore_schedule: "Horario de Tareas",
+                nav_expense_tracker: "Rastreador de Gastos",
+                nav_ai_assistant: "Asistente IA",
+                nav_guest_log: "Registro de Invitados",
+                nav_maintenance: "Mantenimiento",
+                nav_settings: "Configuración",
+                nav_logout: "Cerrar Sesión",
+                upcoming_bills_title: "Cuentas Próximas",
+                chores_this_week_title: "Tus Tareas Esta Semana",
+                recent_maintenance_title: "Solicitudes Recientes",
+            },
+            hi: {
+                dashboard_title: "डैशबोर्ड - को-लिव हब",
+                app_title: "को-लिव हब",
+                welcome_message: "नमस्ते, {username}!",
+                nav_dashboard: "डैशबोर्ड",
+                nav_rent_bills: "किराया और बिल",
+                nav_chore_schedule: "काम का शेड्यूल",
+                nav_expense_tracker: "व्यय ट्रैकर",
+                nav_ai_assistant: "एआई सहायक",
+                nav_guest_log: "अतिथि लॉग",
+                nav_maintenance: "रखरखाव",
+                nav_settings: "सेटिंग्स",
+                nav_logout: "लॉग आउट",
+                upcoming_bills_title: "आगामी बिल",
+                chores_this_week_title: "इस सप्ताह आपके काम",
+                recent_maintenance_title: "हाल के रखरखाव अनुरोध",
+            },
+            te: {
+                dashboard_title: "డాష్‌బోర్డ్ - కో-లివ్ హబ్",
+                app_title: "కో-లివ్ హబ్",
+                welcome_message: "స్వాగతం, {username}!",
+                nav_dashboard: "డాష్‌బోర్డ్",
+                nav_rent_bills: "అద్దె & బిల్లులు",
+                nav_chore_schedule: "పని షెడ్యూల్",
+                nav_expense_tracker: "ఖర్చుల ట్రాకర్",
+                nav_ai_assistant: "AI అసిస్టెంట్",
+                nav_guest_log: "అతిథి లాగ్",
+                nav_maintenance: "నిర్వహణ",
+                nav_settings: "సెట్టింగ్‌లు",
+                nav_logout: "లాగ్ అవుట్",
+                upcoming_bills_title: "రాబోయే బిల్లులు",
+                chores_this_week_title: "ఈ వారం మీ పనులు",
+                recent_maintenance_title: "ఇటీవలి నిర్వహణ అభ్యర్థనలు",
+            }
+        };
+        // --- Role-based Dashboard Templates ---
+        const userDashboardTemplate = `
+            <main class="content">
+                <div class="widget">
+                    <h2 data-translate="upcoming_bills_title">Your Upcoming Bills</h2>
+                    <div id="upcoming-bills-widget"></div>
+                </div>
+                <div class="widget">
+                    <h2 data-translate="chores_this_week_title">Your Chores This Week</h2>
+                    <div id="chores-widget"></div>
+                </div>
+                <div class="widget">
+                    <h2 data-translate="recent_maintenance_title">Recent Maintenance Requests</h2>
+                    <div id="maintenance-widget"></div>
+                </div>
+            </main>
+        `;
+
+        const adminDashboardTemplate = `
+            <main class="content">
+                <div class="widget">
+                    <h2>Property Management</h2>
+                    <p>View all tenants, properties, and rent collection in one place.</p>
+                    <div id="tenant-list"></div>
+                </div>
+                <div class="widget">
+                    <h2>Analytics Dashboard</h2>
+                    <p>Occupancy rates, maintenance trends, and payment reliability.</p>
+                    <div id="analytics-summary"></div>
+                </div>
+                <div class="widget">
+                    <h2>Automated Vacancy Alerts</h2>
+                    <p>Notify landlords when rooms become vacant.</p>
+                    <div id="vacancy-alerts"></div>
+                </div>
+            </main>
+        `;
+
+        const updateDashboardWidgets = () => {
+            const username = sessionStorage.getItem('username') || 'Alex';
+
+            // --- Update Bills Widget ---
+            const billsWidget = document.getElementById('upcoming-bills-widget');
+            const bills = JSON.parse(localStorage.getItem('bills') || '[]');
+            const myUnpaidBills = bills.filter(b => b.roommate === username && b.status === 'unpaid');
+            
+            billsWidget.innerHTML = '';
+            if (myUnpaidBills.length > 0) {
+                myUnpaidBills.forEach(bill => {
+                    const p = document.createElement('p');
+                    p.innerHTML = `<strong>${bill.description}:</strong> $${bill.amount.toFixed(2)} due on ${bill.dueDate}. <span style="color: #e74c3c;">(Unpaid)</span>`;
+                    billsWidget.appendChild(p);
+                });
+            } else {
+                billsWidget.innerHTML = '<p>You have no unpaid bills. Great job!</p>';
+            }
+
+            // --- Update Chores Widget ---
+            const choresWidget = document.getElementById('chores-widget');
+            const chores = JSON.parse(localStorage.getItem('chores') || '[]');
+            const myPendingChores = chores.filter(c => c.assignee === username && c.status === 'pending');
+
+            choresWidget.innerHTML = '';
+            if (myPendingChores.length > 0) {
+                myPendingChores.forEach(chore => {
+                    const p = document.createElement('p');
+                    p.innerHTML = `<strong>${chore.description}</strong> due on ${chore.dueDate}.`;
+                    choresWidget.appendChild(p);
+                });
+            } else {
+                choresWidget.innerHTML = '<p>You have no pending chores this week!</p>';
+            }
+
+            // --- Update Maintenance Widget ---
+            const maintenanceWidget = document.getElementById('maintenance-widget');
+            // This data isn't saved yet, so we'll use static data for now.
+            const maintenanceRequests = [
+                { description: 'Leaky Kitchen Faucet', date: 'Nov 5', status: 'Pending' },
+                { description: 'Washing machine making loud noise', date: 'Nov 10', status: 'Open' }
+            ];
+
+            maintenanceWidget.innerHTML = '';
+            if (maintenanceRequests.length > 0) {
+                maintenanceRequests.forEach(req => {
+                    const p = document.createElement('p');
+                    p.innerHTML = `<strong>${req.description}:</strong> Reported on ${req.date}. Status: <strong>${req.status}</strong>`;
+                    maintenanceWidget.appendChild(p);
+                });
+            } else {
+                maintenanceWidget.innerHTML = '<p>No open maintenance requests.</p>';
+            }
+        };
+
+        const updateAdminDashboard = () => {
+            // --- Update Tenant List ---
+            const tenantListWidget = document.getElementById('tenant-list');
+            const users = JSON.parse(localStorage.getItem('users') || '[]');
+            const tenants = users.filter(u => u.role === 'user');
+            tenantListWidget.innerHTML = `<strong>${tenants.length} Tenants Registered:</strong><br>${tenants.map(t => t.name).join(', ')}`;
+
+            // --- Update Analytics ---
+            const analyticsWidget = document.getElementById('analytics-summary');
+            const bills = JSON.parse(localStorage.getItem('bills') || '[]');
+            const paidBills = bills.filter(b => b.status === 'paid').length;
+            const totalBills = bills.length;
+            const paymentReliability = totalBills > 0 ? ((paidBills / totalBills) * 100).toFixed(0) : 100;
+            analyticsWidget.innerHTML = `
+                <p><strong>Occupancy Rate:</strong> 95%</p>
+                <p><strong>Payment Reliability:</strong> ${paymentReliability}%</p>
+            `;
+
+            // --- Update Vacancy Alerts ---
+            const vacancyWidget = document.getElementById('vacancy-alerts');
+            vacancyWidget.innerHTML = '<p>No current vacancies. All properties are occupied.</p>';
+        };
+
+        const loadDashboardByRole = (role) => {
+            const container = document.getElementById('dashboard-content-wrapper');
+            if (role === 'admin') {
+                container.innerHTML = adminDashboardTemplate;
+                updateAdminDashboard();
+            } else {
+                container.innerHTML = userDashboardTemplate;
+                updateDashboardWidgets();
+            }
+        };
+
+
+        // Sidebar toggle functionality
+        sidebarToggle.addEventListener('click', () => {
+            document.body.classList.toggle('sidebar-collapsed');
+        });
+
+        // Close sidebar if clicking outside of it on mobile
+        document.addEventListener('click', (event) => {
+            if (window.innerWidth <= 768 && sidebar.classList.contains('open')) {
+                if (!sidebar.contains(event.target) && !sidebarToggle.contains(event.target)) {
+                    sidebar.classList.remove('open');
+                } 
+            }
+        });
+
+        // Theme toggle functionality
+        themeToggle.addEventListener('click', () => {
+            document.body.classList.toggle('dark-theme');
+            
+            // Save theme preference to localStorage
+            const isDark = document.body.classList.contains('dark-theme');
+            localStorage.setItem('theme', isDark ? 'dark' : 'light');
+            themeToggle.textContent = isDark ? '☀️' : '🌙';
+        });
+
+        // Language switcher functionality
+        const setLanguage = (lang) => {
+            document.documentElement.lang = lang;
+            localStorage.setItem('language', lang);
+            langSelector.value = lang;
+
+            document.querySelectorAll('[data-translate]').forEach(el => {
+                const key = el.getAttribute('data-translate');
+                let translation = translations[lang][key] || translations['en'][key];
+
+                if (key === 'welcome_message') {
+                    const username = sessionStorage.getItem('username') || 'Alex';
+                    translation = translation.replace('{username}', username);
+                }
+
+                el.textContent = translation;
+            });
+        };
+
+        langSelector.addEventListener('change', (event) => {
+            setLanguage(event.target.value);
+        });
+
+        // Apply saved theme on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            // Apply theme
+            const savedTheme = localStorage.getItem('theme');
+            if (savedTheme === 'dark') {
+                document.body.classList.add('dark-theme');
+                themeToggle.textContent = '☀️';
+            } else {
+                themeToggle.textContent = '🌙';
+            }
+
+            // Apply language
+            const savedLang = localStorage.getItem('language') || 'en';
+            setLanguage(savedLang);
+
+            // Set username in header
+            const username = sessionStorage.getItem('username');
+            if (username) {
+                const userRole = sessionStorage.getItem('userRole') || 'user';
+                const welcomeEl = document.getElementById('username-display');
+                welcomeEl.textContent = `Welcome, ${username}! (${userRole})`;
+                
+                loadDashboardByRole(userRole);
+            } 
+        });
+
+        // --- Voice Navigation Logic ---
+        const micBtn = document.getElementById('mic-btn');
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+        if (SpeechRecognition) {
+            const recognition = new SpeechRecognition();
+
+            micBtn.addEventListener('click', () => {
+                if (micBtn.classList.contains('listening')) {
+                    recognition.stop();
+                } else {
+                    recognition.start();
+                }
+            });
+
+            recognition.onstart = () => {
+                micBtn.classList.add('listening');
+            };
+
+            recognition.onend = () => {
+                micBtn.classList.remove('listening');
+            };
+
+            recognition.onresult = (event) => {
+                const transcript = event.results[0][0].transcript.toLowerCase().trim();
+                handleNavigation(transcript);
+            };
+
+            const handleNavigation = (command) => {
+                const commands = {
+                    'dashboard': 'dashboard.html',
+                    'rent': 'rent-bills.html',
+                    'bills': 'rent-bills.html',
+                    'chores': 'chore-schedule.html',
+                    'schedule': 'chore-schedule.html',
+                    'expense': 'expense-tracker.html',
+                    'tracker': 'expense-tracker.html',
+                    'assistant': 'ai-assistant.html',
+                    'guest': 'guest-log.html',
+                    'maintenance': 'maintenance.html',
+                    'settings': 'settings.html'
+                };
+
+                for (const key in commands) {
+                    if (command.includes(key)) {
+                        window.location.href = commands[key];
+                        return;
+                    }
+                }
+                alert(`Command not recognized: "${command}"`);
+            };
+        } else {
+            micBtn.style.display = 'none';
+            console.log('Speech recognition not supported in this browser.');
+        }
+
+        // --- Hand Gesture Logic ---
+        // --- Hand Gesture Logic (REWRITTEN CLEAN SLATE) ----
+        async function initGestureControls() {
+            const video = document.getElementById("gesture-video");
+            const indicator = document.getElementById("gesture-indicator");
+
+            let model, gestureEstimator;
+            let gestureLock = false; // Lock to prevent rapid firing
+
+            const { GestureDescription, Finger, FingerCurl } = window.fp;
+
+            // Define Gestures
+            const pointingUpGesture = new GestureDescription('☝️');
+            pointingUpGesture.addCurl(Finger.Index, FingerCurl.NoCurl, 1.0);
+            pointingUpGesture.addCurl(Finger.Thumb, FingerCurl.HalfCurl, 0.8);
+            for(let finger of [Finger.Middle, Finger.Ring, Finger.Pinky]) { pointingUpGesture.addCurl(finger, FingerCurl.FullCurl, 1.0); }
+
+            const victoryGesture = new GestureDescription('✌️');
+            victoryGesture.addCurl(Finger.Index, FingerCurl.NoCurl, 1.0); victoryGesture.addCurl(Finger.Middle, FingerCurl.NoCurl, 1.0);
+            victoryGesture.addCurl(Finger.Thumb, FingerCurl.HalfCurl, 0.5); victoryGesture.addCurl(Finger.Ring, FingerCurl.FullCurl, 1.0); victoryGesture.addCurl(Finger.Pinky, FingerCurl.FullCurl, 1.0);
+
+            const threeFingersUpGesture = new GestureDescription('👌');
+            threeFingersUpGesture.addCurl(Finger.Index, FingerCurl.NoCurl, 1.0); threeFingersUpGesture.addCurl(Finger.Middle, FingerCurl.NoCurl, 1.0); threeFingersUpGesture.addCurl(Finger.Ring, FingerCurl.NoCurl, 1.0);
+            threeFingersUpGesture.addCurl(Finger.Thumb, FingerCurl.FullCurl, 1.0); threeFingersUpGesture.addCurl(Finger.Pinky, FingerCurl.FullCurl, 1.0);
+
+            const openPalmGesture = new GestureDescription('🖐️');
+            for(let finger of [Finger.Thumb, Finger.Index, Finger.Middle, Finger.Ring, Finger.Pinky]) { openPalmGesture.addCurl(finger, FingerCurl.NoCurl, 1.0); }
+
+            const iLoveYouGesture = new GestureDescription('🤟');
+            iLoveYouGesture.addCurl(Finger.Thumb, FingerCurl.NoCurl, 1.0); iLoveYouGesture.addCurl(Finger.Index, FingerCurl.NoCurl, 1.0); iLoveYouGesture.addCurl(Finger.Pinky, FingerCurl.NoCurl, 1.0);
+            iLoveYouGesture.addCurl(Finger.Middle, FingerCurl.FullCurl, 1.0); iLoveYouGesture.addCurl(Finger.Ring, FingerCurl.FullCurl, 1.0);
+
+            const gestureList = [pointingUpGesture, victoryGesture, threeFingersUpGesture, openPalmGesture, iLoveYouGesture];
+            gestureEstimator = new window.fp.GestureEstimator(gestureList);
+
+            const showGesture = (emoji) => {
+                indicator.textContent = emoji;
+                indicator.style.opacity = 1;
+                indicator.style.transform = "scale(1.3)";
+                setTimeout(() => {
+                    indicator.style.opacity = 0;
+                    indicator.style.transform = "scale(1)";
+                }, 1200);
+            };
+
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                video.srcObject = stream;
+                await video.play();
+
+                model = await handpose.load();
+                setInterval(predictGesture, 200);
+            } catch (err) {
+                console.error("Camera or model load error:", err);
+            }
+
+            async function predictGesture() {
+                if (gestureLock) return;
+                const predictions = await model.estimateHands(video);
+                if (!predictions.length) return;
+
+                const est = gestureEstimator.estimate(predictions[0].landmarks, 8.5);
+                if (!est.gestures.length) return;
+                
+                const best = est.gestures.reduce((p, c) => (p.confidence > c.confidence ? p : c));
+                
+                triggerGestureAction(best.name);
+            }
+
+            function triggerGestureAction(gestureName) {
+                if (gestureLock) return;
+                gestureLock = true;
+                showGesture(gestureName);
+
+                const navLinks = Array.from(document.querySelectorAll('.sidebar a'));
+                const activeIndex = navLinks.findIndex(link => link.classList.contains('active'));
+
+                if (gestureName === '☝️') { document.getElementById('mic-btn').click(); } 
+                else if (gestureName === '✌️') { const nextIndex = (activeIndex + 1) % navLinks.length; window.location.href = navLinks[nextIndex].href; } 
+                else if (gestureName === '👌') { document.body.classList.toggle('sidebar-collapsed'); } 
+                else if (gestureName === '🖐️') { const prevIndex = (activeIndex - 1 + navLinks.length) % navLinks.length; window.location.href = navLinks[prevIndex].href; } 
+                else if (gestureName === '🤟') { document.getElementById('theme-toggle').click(); }
+
+                setTimeout(() => { gestureLock = false; }, 1500); // Cooldown period
+            }
+        }
+        initGestureControls(); // Start gesture recognition
+    </script>
+
+</body>
+</html>

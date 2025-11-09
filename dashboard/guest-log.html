@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title data-translate="guest_log_title">Guest Log - Co-Live Hub</title>
+    <!-- Gesture Recognition Libraries -->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-converter"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/handpose"></script>
+    <script src="https://cdn.jsdelivr.net/npm/fingerpose@0.1.0/dist/fingerpose.min.js"></script>
+
+    <style>
+        :root {
+            --bg-color: #f4f7f6;
+            --widget-bg: white;
+            --text-color: #333;
+            --header-bg: #2c3e50;
+            --sidebar-bg: #34495e;
+            --accent-color: #1abc9c;
+            --border-color: #ecf0f1;
+        }
+
+        body.dark-theme {
+            --bg-color: #2c3e50;
+            --widget-bg: #34495e;
+            --text-color: #ecf0f1;
+            --header-bg: #1a252f;
+            --sidebar-bg: #2c3e50;
+            --accent-color: #1abc9c;
+            --border-color: #4a627a;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            margin: 0;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            transition: background-color 0.3s, color 0.3s;
+        }
+
+        .header {
+            background: var(--header-bg);
+            color: white;
+            padding: 10px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            border-bottom: 1px solid var(--border-color);
+            top: 0;
+            z-index: 1000;
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+        }
+
+        .header .logo {
+            font-weight: bold;
+            font-size: 1.5em;
+        }
+
+        .main-container {
+            display: flex;
+        }
+
+        .sidebar {
+            width: 220px;
+            background: var(--sidebar-bg);
+            height: 100vh;
+            transition: transform 0.3s ease-in-out;
+        }
+
+        body.sidebar-collapsed .sidebar {
+            width: 80px;
+        }
+
+        .sidebar ul {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .sidebar a {
+            display: block;
+            padding: 15px 20px;
+            color: white;
+            text-decoration: none;
+            border-bottom: 1px solid var(--header-bg);
+            transition: background 0.3s;
+        }
+
+        body.sidebar-collapsed .sidebar a {
+            text-align: center;
+        }
+
+        .sidebar a:hover, .sidebar a.active {
+            background: var(--accent-color);
+        }
+
+        .content {
+            flex-grow: 1;
+            padding: 30px;
+            transition: margin-left 0.3s ease-in-out;
+        }
+        .widget {
+            background: var(--widget-bg);
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .widget h2 {
+            margin-top: 0;
+            border-bottom: 2px solid var(--border-color);
+            padding-bottom: 10px;
+            color: var(--text-color);
+        }
+
+        .btn {
+            padding: 10px 15px;
+            border: none;
+            border-radius: 5px;
+            color: white;
+            cursor: pointer;
+            text-decoration: none;
+            font-size: 1em;
+        }
+
+        .btn-primary { background-color: #3498db; }
+
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            align-items: flex-end;
+        }
+        .form-group {
+            display: flex;
+            flex-direction: column;
+        }
+        .form-group label {
+            margin-bottom: 5px;
+            font-weight: bold;
+            font-size: 0.9em;
+        }
+        .form-group input {
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            font-size: 1em;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .form-group input:focus {
+            outline: none;
+            border-color: #3498db;
+            box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
+        }
+        .guest-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        .guest-table th, .guest-table td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+        }
+        .guest-table th {
+            background-color: var(--bg-color);
+            font-weight: 600;
+            font-size: 0.9em;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        #language-selector {
+            background-color: var(--sidebar-bg);
+            color: white;
+            border: 1px solid var(--border-color);
+            border-radius: 5px;
+            padding: 5px;
+            margin-left: 15px;
+            font-family: inherit;
+            cursor: pointer;
+        }
+
+        .sidebar-toggle, #theme-toggle {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 1.5em;
+            cursor: pointer;
+            margin-right: 15px;
+        }
+
+        #theme-toggle {
+            margin-right: 0;
+            margin-left: 15px;
+        }
+
+        .sidebar-toggle {
+            /* Always visible */
+        }
+
+        .nav-icon {
+            margin-right: 10px;
+            font-size: 1.1em;
+        }
+
+        body.sidebar-collapsed .sidebar .nav-icon {
+            margin-right: 0;
+        }
+
+        body.sidebar-collapsed .sidebar a span:not(.nav-icon) {
+            display: none;
+        }
+
+        /* Responsive Styles */
+        @media (max-width: 768px) {
+            .main-container {
+                flex-direction: column;
+            }
+            .sidebar {
+                position: fixed;
+                left: 0;
+                top: 0;
+                height: 100%;
+                transform: translateX(-100%);
+                z-index: 1001;
+            }
+            .sidebar.open {
+                transform: translateX(0);
+            }
+            .sidebar-toggle {
+                display: block; /* Shown on mobile */
+            }
+            .content {
+                padding: 20px;
+            }
+            .form-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        #mic-btn {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 1.5em;
+            cursor: pointer;
+            margin-left: 15px;
+        }
+        #mic-btn.listening {
+            color: #e74c3c;
+            animation: pulse 1.5s infinite;
+        }
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.2); }
+            100% { transform: scale(1); }
+        }
+
+        #gesture-indicator {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            font-size: 3em;
+            opacity: 0;
+            transition: opacity 0.5s, transform 0.5s;
+        }
+
+        .btn-danger {
+            background-color: #e74c3c;
+        }
+
+        .btn-sm {
+            padding: 5px 10px;
+            font-size: 0.8em;
+        }
+    </style>
+</head>
+<body>
+
+    <script>
+        // Protect this page: if the user is not logged in, redirect to login.html
+        if (sessionStorage.getItem('isLoggedIn') !== 'true') {
+            window.location.href = 'login.html';
+        }
+    </script>
+
+    <div class="header">
+        <div class="header-left">
+            <button class="sidebar-toggle" id="sidebar-toggle">☰</button>
+            <div class="logo" data-translate="app_title">Co-Live Hub</div>
+        </div>
+        <div style="display: flex; align-items: center;">
+            <span id="username-display" data-translate="welcome_message">Welcome, Alex!</span>
+            <button id="theme-toggle">🌙</button>
+            <button id="mic-btn">🎤</button>
+            <select id="language-selector">
+                <option value="en">English</option>
+                <option value="es">Español</option>
+                <option value="hi">हिन्दी</option>
+                <option value="te">తెలుగు</option>
+            </select>
+        </div>
+    </div>
+
+    <!-- Hidden video element for gesture detection -->
+    <video id="gesture-video" style="display: none;"></video>
+    <div id="gesture-indicator"></div>
+
+    <div class="main-container">
+        <nav class="sidebar" id="sidebar">
+            <ul>
+                <li><a href="dashboard.html"><span class="nav-icon">📊</span><span data-translate="nav_dashboard">Dashboard</span></a></li>
+                <li><a href="ai-assistant.html"><span class="nav-icon">🤖</span><span data-translate="nav_ai_assistant">AI Assistant</span></a></li>
+                <li><a href="expense-tracker.html"><span class="nav-icon">🧾</span><span data-translate="nav_expense_tracker">Expense Tracker</span></a></li>
+                <li><a href="rent-bills.html"><span class="nav-icon">💰</span><span data-translate="nav_rent_bills">Rent & Bills</span></a></li>
+                <li><a href="chore-schedule.html"><span class="nav-icon">🧹</span><span data-translate="nav_chore_schedule">Chore Schedule</span></a></li>
+                <li><a href="guest-log.html" class="active"><span class="nav-icon">👥</span><span data-translate="nav_guest_log">Guest Log</span></a></li>
+                <li><a href="maintenance.html"><span class="nav-icon">🔧</span><span data-translate="nav_maintenance">Maintenance</span></a></li>
+                <li><a href="settings.html"><span class="nav-icon">⚙️</span><span data-translate="nav_settings">Settings</span></a></li>
+                <li><a href="logout.html"><span class="nav-icon">🚪</span><span data-translate="nav_logout">Logout</span></a></li>
+            </ul>
+        </nav>
+
+        <main class="content">
+            <div class="widget">
+                <h2 data-translate="register_guest_title">Register a New Guest</h2>
+                <form id="register-guest-form" class="form-grid">
+                    <div class="form-group">
+                        <label for="guest-name" data-translate="form_guest_name">Guest Name</label>
+                        <input type="text" id="guest-name" name="guest-name" placeholder="e.g., John Doe" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="visit-date" data-translate="form_visit_date">Date of Visit</label>
+                        <input type="date" id="visit-date" name="visit-date" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="visit-time" data-translate="form_arrival_time">Time of Arrival</label>
+                        <input type="time" id="visit-time" name="visit-time" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary" data-translate="form_register_guest_button">Register Guest</button>
+                </form>
+            </div>
+
+            <div class="widget">
+                <h2 data-translate="guest_history_title">Guest History</h2>
+                <table class="guest-table">
+                    <thead>
+                        <tr>
+                            <th data-translate="table_guest_name">Guest Name</th>
+                            <th data-translate="table_date">Date</th>
+                            <th data-translate="table_time">Time</th>
+                            <th data-translate="table_registered_by">Registered By</th>
+                            <th data-translate="table_action">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="guest-log-body"></tbody>
+                </table>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        const guestsDB = {
+            get: () => JSON.parse(localStorage.getItem('guests') || '[]'),
+            save: (guests) => localStorage.setItem('guests', JSON.stringify(guests))
+        };
+
+        const renderGuests = () => {
+            const guests = guestsDB.get().sort((a, b) => new Date(b.date) - new Date(a.date));
+            const tableBody = document.getElementById('guest-log-body');
+            tableBody.innerHTML = '';
+            guests.forEach(guest => {
+                const row = tableBody.insertRow();
+                row.setAttribute('data-id', guest.id);
+                row.innerHTML = `
+                    <td>${guest.name}</td>
+                    <td>${new Date(guest.date).toLocaleDateString()}</td>
+                    <td>${guest.time}</td>
+                    <td>${guest.registeredBy}</td>
+                    <td><button class="btn btn-danger btn-sm">Delete</button></td>
+                `;
+            });
+        };
+
+        document.getElementById('register-guest-form').addEventListener('submit', function(event) {
+            event.preventDefault();
+
+            const guestName = document.getElementById('guest-name').value;
+            const visitDateInput = document.getElementById('visit-date').value;
+            const visitTimeInput = document.getElementById('visit-time').value;
+            
+            const [hours, minutes] = visitTimeInput.split(':');
+            const ampm = hours >= 12 ? 'PM' : 'AM';
+            const formattedHours = hours % 12 || 12;
+            const formattedTime = `${formattedHours}:${minutes} ${ampm}`;
+
+            const guests = guestsDB.get();
+            const newGuest = {
+                id: Date.now(),
+                name: guestName,
+                date: new Date(visitDateInput + 'T00:00:00').toISOString(),
+                time: formattedTime,
+                registeredBy: sessionStorage.getItem('username') || 'Alex'
+            };
+
+            guests.push(newGuest);
+            guestsDB.save(guests);
+            renderGuests();
+
+            this.reset();
+            alert(`All roommates have been notified that ${guestName} will be visiting.`);
+        });
+
+        document.getElementById('guest-log-body').addEventListener('click', (e) => {
+            if (e.target.classList.contains('btn-danger')) {
+                const id = parseInt(e.target.closest('tr').getAttribute('data-id'));
+                let guests = guestsDB.get();
+                guests = guests.filter(g => g.id !== id);
+                guestsDB.save(guests);
+                renderGuests();
+            }
+        });
+
+        e   initGestureControls();
+            const savedTheme = localStorage.getItem('theme');
+            if (savedTheme === 'dark') {
+                document.body.classList.add('dark-theme');
+                themeToggle.textContent = '☀️';
+            } else {
+                themeToggle.textContent = '🌙';
+            }
+            const savedLang = localStorage.getItem('language') || 'en';
+            setLanguage(savedLang);
+            const username = sessionStorage.getItem('username');
+            if (username) {
+                document.getElementById('username-display').textContent = `Welcome, ${username}!`;
+            }
+        ;
+
+        // --- Voice Navigation Logic ---
+        const micBtn = document.getElementById('mic-btn');
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+        if (SpeechRecognition) {
+            const recognition = new SpeechRecognition();
+
+            micBtn.addEventListener('click', () => {
+                micBtn.classList.contains('listening') ? recognition.stop() : recognition.start();
+            });
+
+            recognition.onstart = () => micBtn.classList.add('listening');
+            recognition.onend = () => micBtn.classList.remove('listening');
+
+            recognition.onresult = (event) => {
+                const transcript = event.results[0][0].transcript.toLowerCase().trim();
+                handleNavigation(transcript);
+            };
+
+            const handleNavigation = (command) => {
+                const commands = {
+                    'dashboard': 'dashboard.html', 'rent': 'rent-bills.html', 'bills': 'rent-bills.html',
+                    'chores': 'chore-schedule.html', 'schedule': 'chore-schedule.html', 'expense': 'expense-tracker.html',
+                    'tracker': 'expense-tracker.html', 'assistant': 'ai-assistant.html', 'guest': 'guest-log.html',
+                    'maintenance': 'maintenance.html', 'settings': 'settings.html'
+                };
+                for (const key in commands) {
+                    if (command.includes(key)) { window.location.href = commands[key]; return; }
+                }
+                alert(`Command not recognized: "${command}"`);
+            };
+        } else {
+            micBtn.style.display = 'none';
+        }
+
+        // --- Hand Gesture Logic ---
+        async function initGestureControls() {
+            const video = document.getElementById('gesture-video');
+            const indicator = document.getElementById('gesture-indicator');
+            let model, gestureEstimator, lastGesture = null, gestureTimeout;
+
+            const showIndicator = (gesture) => {
+                indicator.textContent = gesture;
+                indicator.style.opacity = 1;
+                clearTimeout(gestureTimeout);
+                gestureTimeout = setTimeout(() => { indicator.style.opacity = 0; }, 1500);
+            };
+
+            const { GestureDescription, Finger, FingerCurl } = window.fp;
+            const thumbsUpGesture = new GestureDescription('thumbs_up');
+            thumbsUpGesture.addCurl(Finger.Thumb, FingerCurl.NoCurl, 1.0);
+            for(let finger of [Finger.Index, Finger.Middle, Finger.Ring, Finger.Pinky]) { thumbsUpGesture.addCurl(finger, FingerCurl.FullCurl, 1.0); }
+
+            const openPalmGesture = new GestureDescription('open_palm');
+            for(let finger of [Finger.Thumb, Finger.Index, Finger.Middle, Finger.Ring, Finger.Pinky]) { openPalmGesture.addCurl(finger, FingerCurl.NoCurl, 1.0); }
+
+            const victoryGesture = new GestureDescription('victory');
+            victoryGesture.addCurl(Finger.Index, FingerCurl.NoCurl, 1.0);
+            victoryGesture.addCurl(Finger.Middle, FingerCurl.NoCurl, 1.0);
+            victoryGesture.addCurl(Finger.Thumb, FingerCurl.HalfCurl, 0.5);
+            victoryGesture.addCurl(Finger.Ring, FingerCurl.FullCurl, 1.0);
+            victoryGesture.addCurl(Finger.Pinky, FingerCurl.FullCurl, 1.0);
+
+            const iLoveYouGesture = new GestureDescription('i_love_you');
+            iLoveYouGesture.addCurl(Finger.Thumb, FingerCurl.NoCurl, 1.0);
+            iLoveYouGesture.addCurl(Finger.Index, FingerCurl.NoCurl, 1.0);
+            iLoveYouGesture.addCurl(Finger.Pinky, FingerCurl.NoCurl, 1.0);
+            iLoveYouGesture.addCurl(Finger.Middle, FingerCurl.FullCurl, 1.0);
+            iLoveYouGesture.addCurl(Finger.Ring, FingerCurl.FullCurl, 1.0);
+
+            const knownGestures = [thumbsUpGesture, openPalmGesture, victoryGesture, iLoveYouGesture];
+            gestureEstimator = new window.fp.GestureEstimator(knownGestures);
+
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                video.srcObject = stream;
+                video.play();
+                model = await handpose.load();
+                setInterval(predictGestures, 200);
+            } catch (err) { console.error("Error accessing webcam or loading model:", err); }
+
+            async function predictGestures() {
+                const predictions = await model.estimateHands(video);
+                if (predictions.length > 0) {
+                    const estimatedGestures = gestureEstimator.estimate(predictions[0].landmarks, 8.5);
+                    if (estimatedGestures.gestures.length > 0) {
+                        const bestGesture = estimatedGestures.gestures[0];
+                        if (bestGesture.name !== lastGesture) { lastGesture = bestGesture.name; handleGestureAction(bestGesture.name); }
+                    }
+                } else { lastGesture = null; }
+            }
+
+            function handleGestureAction(gestureName) {
+                const navLinks = Array.from(document.querySelectorAll('.sidebar a'));
+                const activeIndex = navLinks.findIndex(link => link.classList.contains('active'));
+                if (gestureName === 'victory') { showIndicator('✌️'); document.body.classList.toggle('sidebar-collapsed'); }
+                else if (gestureName === 'thumbs_up') { showIndicator('👍'); const nextIndex = (activeIndex + 1) % navLinks.length; window.location.href = navLinks[nextIndex].href; }
+                else if (gestureName === 'open_palm') { showIndicator('🖐️'); const prevIndex = (activeIndex - 1 + navLinks.length) % navLinks.length; window.location.href = navLinks[prevIndex].href; }
+                else if (gestureName === 'i_love_you') { showIndicator('🤟'); document.getElementById('theme-toggle').click(); }
+            }
+        }
+    </script>
+
+</body>
+</html>

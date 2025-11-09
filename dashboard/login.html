@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - Co-Live Hub</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            margin: 0;
+            background-color: #f4f7f6;
+            color: #333;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+        .login-container {
+            background: white;
+            padding: 40px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+            width: 100%;
+            max-width: 400px;
+            text-align: center;
+            animation: fadeInSlideUp 0.7s ease-out forwards;
+        }
+        @keyframes fadeInSlideUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        .login-container h1 {
+            color: #2c3e50;
+            margin-bottom: 10px;
+        }
+        .login-container p {
+            color: #7f8c8d;
+            margin-bottom: 30px;
+        }
+        .form-group {
+            margin-bottom: 20px;
+            text-align: left;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            font-size: 0.9em;
+        }
+        .form-group input {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            font-size: 1em;
+            box-sizing: border-box;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .form-group input:focus {
+            outline: none;
+            border-color: #3498db;
+            box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
+        }
+        .btn {
+            padding: 12px 20px;
+            border: none;
+            border-radius: 5px;
+            color: white;
+            cursor: pointer;
+            font-size: 1em;
+            width: 100%;
+            background-color: #3498db;
+            transition: background-color 0.3s, transform 0.2s ease-out, box-shadow 0.3s;
+        }
+        .btn:hover {
+            background-color: #2980b9;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+        }
+        .error-message {
+            color: #e74c3c;
+            margin-top: 15px;
+            display: none; /* Hidden by default */
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <h1>Welcome to Co-Live Hub</h1>
+        <p>Please sign in to continue</p>
+        <form id="login-form">
+            <div class="form-group">
+                <label for="email">Email Address</label>
+                <input type="email" id="email" name="email" value="alex@example.com" required>
+            </div>
+            <div class="form-group">
+                <label for="password">Password</label>
+                <input type="password" id="password" name="password" value="password123" required>
+            </div>
+            <button type="submit" class="btn">Login</button>
+            <p id="error-message" class="error-message">Invalid email or password.</p>
+            <p class="signup-link">Don't have an account? <a href="signup.html">Sign Up</a></p>
+        </form>
+    </div>
+
+    <script>
+        document.getElementById('login-form').addEventListener('submit', async function(event) {
+            event.preventDefault();
+            const errorMessage = document.getElementById('error-message');
+            errorMessage.style.display = 'none';
+
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+
+            // Simulate checking credentials against localStorage
+            const users = JSON.parse(localStorage.getItem('users') || '[]');
+            const foundUser = users.find(user => user.email === email && user.password === password);
+
+            if (foundUser) {
+                // On successful login, store session info and redirect.
+                sessionStorage.setItem('isLoggedIn', 'true');
+                sessionStorage.setItem('username', foundUser.name);
+                sessionStorage.setItem('userRole', foundUser.role); // Store the user's role
+                window.location.href = 'dashboard.html';
+            } else {
+                // Add a default admin user if no users exist for easy first-time access
+                if (email === 'admin@example.com' && password === 'admin123' && users.length === 0) {
+                    sessionStorage.setItem('isLoggedIn', 'true');
+                    sessionStorage.setItem('username', 'Admin');
+                    sessionStorage.setItem('userRole', 'admin');
+                    window.location.href = 'dashboard.html';
+                } else {
+                    errorMessage.style.display = 'block';
+                }
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title data-translate="ai_assistant_title">AI Assistant - Co-Live Hub</title>
+    <style>
+        :root {
+            --bg-color: #f4f7f6;
+            --widget-bg: white;
+            --text-color: #333;
+            --header-bg: #2c3e50;
+            --sidebar-bg: #34495e;
+            --accent-color: #1abc9c;
+            --border-color: #ecf0f1;
+        }
+        body.dark-theme {
+            --bg-color: #2c3e50;
+            --widget-bg: #34495e;
+            --text-color: #ecf0f1;
+            --header-bg: #1a252f;
+            --sidebar-bg: #2c3e50;
+            --accent-color: #1abc9c;
+            --border-color: #4a627a;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            margin: 0;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            transition: background-color 0.3s, color 0.3s;
+        }
+        .header {
+            background: var(--header-bg);
+            color: white;
+            padding: 10px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            border-bottom: 1px solid var(--border-color);
+            z-index: 1000;
+        }
+        .header-left { display: flex; align-items: center; }
+        .header .logo { font-weight: bold; font-size: 1.5em; }
+        .main-container { display: flex; }
+        .sidebar {
+            width: 220px;
+            background: var(--sidebar-bg);
+            height: 100vh;
+            transition: width 0.3s ease-in-out;
+        }
+        body.sidebar-collapsed .sidebar { width: 80px; }
+        .sidebar ul { list-style: none; padding: 0; margin: 0; }
+        .sidebar a {
+            display: block;
+            padding: 15px 20px;
+            color: white;
+            text-decoration: none;
+            border-bottom: 1px solid var(--header-bg);
+            transition: background 0.3s;
+        }
+        body.sidebar-collapsed .sidebar a { text-align: center; }
+        .sidebar a:hover, .sidebar a.active { background: var(--accent-color); }
+        .content {
+            flex-grow: 1;
+            padding: 30px;
+            transition: margin-left 0.3s ease-in-out;
+        }
+        body.sidebar-collapsed .content { margin-left: -140px; }
+        .widget {
+            background: var(--widget-bg);
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+            animation: fadeIn 0.5s ease-in-out;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .widget h2 {
+            margin-top: 0;
+            border-bottom: 2px solid var(--border-color);
+            padding-bottom: 10px;
+            color: var(--text-color);
+        }
+        .btn {
+            padding: 10px 15px;
+            border: none;
+            border-radius: 5px;
+            color: white;
+            cursor: pointer;
+            text-decoration: none;
+            font-size: 0.9em;
+        }
+        .btn-primary { background-color: #3498db; }
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            align-items: flex-end;
+        }
+        .form-group { display: flex; flex-direction: column; }
+        .form-group label { margin-bottom: 5px; font-weight: bold; font-size: 0.9em; }
+        .form-group input, .form-group select {
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            font-size: 1em;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .form-group input:focus, .form-group select:focus {
+            outline: none;
+            border-color: #3498db;
+            box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
+        }
+        #ai-log {
+            background-color: var(--bg-color);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 20px;
+            height: 150px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 0.9em;
+        }
+        #ai-log p { margin: 0 0 5px 0; }
+        #language-selector {
+            background-color: var(--sidebar-bg);
+            color: white;
+            border: 1px solid var(--border-color);
+            border-radius: 5px;
+            padding: 5px;
+            margin-left: 15px;
+            font-family: inherit;
+            cursor: pointer;
+        }
+        .sidebar-toggle, #theme-toggle {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 1.5em;
+            cursor: pointer;
+            margin-right: 15px;
+        }
+        #theme-toggle { margin-right: 0; margin-left: 15px; }
+        .nav-icon { margin-right: 10px; font-size: 1.1em; }
+        body.sidebar-collapsed .sidebar .nav-icon { margin-right: 0; }
+        body.sidebar-collapsed .sidebar a span:not(.nav-icon) { display: none; }
+        @media (max-width: 768px) {
+            .main-container { flex-direction: column; }
+            .sidebar { position: fixed; left: 0; top: 0; height: 100%; transform: translateX(-100%); z-index: 1001; }
+            .sidebar.open { transform: translateX(0); }
+            .sidebar-toggle { display: block; }
+            .content { padding: 20px; }
+            .form-grid { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+
+    <script>
+        if (sessionStorage.getItem('isLoggedIn') !== 'true') {
+            window.location.href = 'login.html';
+        }
+    </script>
+
+    <div class="header">
+        <div class="header-left">
+            <button class="sidebar-toggle" id="sidebar-toggle">☰</button>
+            <div class="logo" data-translate="app_title">Co-Live Hub</div>
+        </div>
+        <div style="display: flex; align-items: center;">
+            <span id="username-display" data-translate="welcome_message">Welcome, Alex!</span>
+            <button id="theme-toggle">🌙</button>
+            <select id="language-selector">
+                <option value="en">English</option>
+                <option value="es">Español</option>
+                <option value="hi">हिन्दी</option>
+                <option value="te">తెలుగు</option>
+            </select>
+        </div>
+    </div>
+
+    <div class="main-container">
+        <nav class="sidebar" id="sidebar">
+            <ul>
+                <li><a href="dashboard.html"><span class="nav-icon">📊</span><span data-translate="nav_dashboard">Dashboard</span></a></li>
+                <li><a href="rent-bills.html"><span class="nav-icon">💰</span><span data-translate="nav_rent_bills">Rent & Bills</span></a></li>
+                <li><a href="chore-schedule.html"><span class="nav-icon">🧹</span><span data-translate="nav_chore_schedule">Chore Schedule</span></a></li>
+                <li><a href="expense-tracker.html"><span class="nav-icon">🧾</span><span data-translate="nav_expense_tracker">Expense Tracker</span></a></li>
+                <li><a href="ai-assistant.html" class="active"><span class="nav-icon">🤖</span><span data-translate="nav_ai_assistant">AI Assistant</span></a></li>
+                <li><a href="guest-log.html"><span class="nav-icon">👥</span><span data-translate="nav_guest_log">Guest Log</span></a></li>
+                <li><a href="maintenance.html"><span class="nav-icon">🔧</span><span data-translate="nav_maintenance">Maintenance</span></a></li>
+                <li><a href="settings.html"><span class="nav-icon">⚙️</span><span data-translate="nav_settings">Settings</span></a></li>
+                <li><a href="logout.html"><span class="nav-icon">🚪</span><span data-translate="nav_logout">Logout</span></a></li>
+            </ul>
+        </nav>
+
+        <main class="content">
+            <div class="widget">
+                <h2 data-translate="availability_title">User Availability</h2>
+                <p data-translate="availability_desc">Set a user's availability to automatically rebalance their chores. For example, if they are traveling.</p>
+                <form id="availability-form" class="form-grid">
+                    <div class="form-group">
+                        <label for="user-select" data-translate="form_select_user">Select User</label>
+                        <select id="user-select"></select>
+                    </div>
+                    <div class="form-group">
+                        <label for="unavailable-from" data-translate="form_unavailable_from">Unavailable From</label>
+                        <input type="date" id="unavailable-from" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="unavailable-to" data-translate="form_unavailable_to">Unavailable To</label>
+                        <input type="date" id="unavailable-to" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary" data-translate="form_set_availability_button">Set Availability</button>
+                </form>
+            </div>
+
+            <div class="widget">
+                <h2 data-translate="smart_chore_title">Smart Chore Rebalancing</h2>
+                <p data-translate="smart_chore_desc">Click the button below to let the AI analyze user availability and reassign any pending chores fairly.</p>
+                <button id="rebalance-chores-btn" class="btn btn-primary" style="width: 100%;">🤖 Rebalance Chores Now</button>
+                <div id="ai-log">
+                    <p>AI Assistant Log Initialized...</p>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        const availabilityDB = {
+            get: () => JSON.parse(localStorage.getItem('availability') || '{}'),
+            set: (data) => localStorage.setItem('availability', JSON.stringify(data))
+        };
+
+        const logToAI = (message) => {
+            const log = document.getElementById('ai-log');
+            log.innerHTML += `<p>> ${message}</p>`;
+            log.scrollTop = log.scrollHeight;
+        };
+
+        const populateUserSelect = () => {
+            const users = JSON.parse(localStorage.getItem('users') || '[]');
+            const userSelect = document.getElementById('user-select');
+            userSelect.innerHTML = '';
+            users.forEach(user => {
+                const option = document.createElement('option');
+                option.value = user.name;
+                option.textContent = user.name;
+                userSelect.appendChild(option);
+            });
+        };
+
+        document.getElementById('availability-form').addEventListener('submit', (e) => {
+            e.preventDefault();
+            const user = document.getElementById('user-select').value;
+            const from = document.getElementById('unavailable-from').value;
+            const to = document.getElementById('unavailable-to').value;
+
+            if (!user || !from || !to) {
+                alert('Please fill all fields.');
+                return;
+            }
+
+            const availability = availabilityDB.get();
+            availability[user] = { from, to };
+            availabilityDB.set(availability);
+
+            logToAI(`Set ${user} as unavailable from ${from} to ${to}.`);
+            alert(`${user}'s availability has been updated.`);
+        });
+
+        document.getElementById('rebalance-chores-btn').addEventListener('click', () => {
+            logToAI('Starting chore rebalancing process...');
+            const chores = JSON.parse(localStorage.getItem('chores') || '[]');
+            const availability = availabilityDB.get();
+            const users = JSON.parse(localStorage.getItem('users') || '[]');
+            const roommateNames = users.map(u => u.name);
+
+            let rebalanced = false;
+
+            chores.forEach(chore => {
+                if (chore.status === 'pending') {
+                    const assignedUser = chore.assignee;
+                    const userAvailability = availability[assignedUser];
+
+                    if (userAvailability) {
+                        const choreDueDate = new Date(chore.dueDate);
+                        const unavailableFrom = new Date(userAvailability.from);
+                        const unavailableTo = new Date(userAvailability.to);
+
+                        if (choreDueDate >= unavailableFrom && choreDueDate <= unavailableTo) {
+                            const availableRoommates = roommateNames.filter(name => name !== assignedUser);
+                            if (availableRoommates.length > 0) {
+                                const newAssignee = availableRoommates[0]; // Simple reassignment
+                                logToAI(`User ${assignedUser} is unavailable. Reassigning chore "${chore.description}" to ${newAssignee}.`);
+                                chore.assignee = newAssignee;
+                                rebalanced = true;
+                            } else {
+                                logToAI(`Warning: ${assignedUser} is unavailable, but no other roommates are available to take the chore.`);
+                            }
+                        }
+                    }
+                }
+            });
+
+            if (rebalanced) {
+                localStorage.setItem('chores', JSON.stringify(chores));
+                logToAI('Chore rebalancing complete. Changes have been saved.');
+                alert('Chores have been successfully rebalanced!');
+            } else {
+                logToAI('No chores needed rebalancing based on current availability.');
+            }
+        });
+
+        // --- Shared Sidebar & Theme Logic ---
+        const sidebarToggle = document.getElementById('sidebar-toggle');
+        const sidebar = document.getElementById('sidebar');
+        const themeToggle = document.getElementById('theme-toggle');
+        const langSelector = document.getElementById('language-selector');
+
+        const translations = {
+            en: {
+                ai_assistant_title: "AI Assistant - Co-Live Hub",
+                app_title: "Co-Live Hub",
+                welcome_message: "Welcome, {username}!",
+                nav_dashboard: "Dashboard",
+                nav_rent_bills: "Rent & Bills",
+                nav_chore_schedule: "Chore Schedule",
+                nav_expense_tracker: "Expense Tracker",
+                nav_ai_assistant: "AI Assistant",
+                nav_guest_log: "Guest Log",
+                nav_maintenance: "Maintenance",
+                nav_settings: "Settings",
+                nav_logout: "Logout",
+                availability_title: "User Availability",
+                availability_desc: "Set a user's availability to automatically rebalance their chores. For example, if they are traveling.",
+                form_select_user: "Select User",
+                form_unavailable_from: "Unavailable From",
+                form_unavailable_to: "Unavailable To",
+                form_set_availability_button: "Set Availability",
+                smart_chore_title: "Smart Chore Rebalancing",
+                smart_chore_desc: "Click the button below to let the AI analyze user availability and reassign any pending chores fairly.",
+            },
+            // Other languages...
+        };
+
+        sidebarToggle.addEventListener('click', () => document.body.classList.toggle('sidebar-collapsed'));
+        document.addEventListener('click', (event) => {
+            if (window.innerWidth <= 768 && sidebar.classList.contains('open')) {
+                if (!sidebar.contains(event.target) && !sidebarToggle.contains(event.target)) {
+                    sidebar.classList.remove('open');
+                }
+            }
+        });
+        themeToggle.addEventListener('click', () => {
+            document.body.classList.toggle('dark-theme');
+            const isDark = document.body.classList.contains('dark-theme');
+            localStorage.setItem('theme', isDark ? 'dark' : 'light');
+            themeToggle.textContent = isDark ? '☀️' : '🌙';
+        });
+        const setLanguage = (lang) => {
+            document.documentElement.lang = lang;
+            localStorage.setItem('language', lang);
+            langSelector.value = lang;
+            document.querySelectorAll('[data-translate]').forEach(el => {
+                const key = el.getAttribute('data-translate');
+                let translation = (translations[lang] && translations[lang][key]) || translations['en'][key];
+                if (key === 'welcome_message') {
+                    const username = sessionStorage.getItem('username') || 'Alex';
+                    translation = translation.replace('{username}', username);
+                }
+                if(translation) el.textContent = translation;
+            });
+        };
+        langSelector.addEventListener('change', (e) => setLanguage(e.target.value));
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const savedTheme = localStorage.getItem('theme');
+            if (savedTheme === 'dark') {
+                document.body.classList.add('dark-theme');
+                themeToggle.textContent = '☀️';
+            } else {
+                themeToggle.textContent = '🌙';
+            }
+            const savedLang = localStorage.getItem('language') || 'en';
+            setLanguage(savedLang);
+            const username = sessionStorage.getItem('username');
+            if (username) {
+                document.getElementById('username-display').textContent = `Welcome, ${username}!`;
+            }
+            populateUserSelect();
+        });
+    </script>
+    <script>
+        // --- Voice Navigation Logic ---
+        const micBtn = document.getElementById('mic-btn');
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+        if (SpeechRecognition) {
+            const recognition = new SpeechRecognition();
+
+            micBtn.addEventListener('click', () => {
+                micBtn.classList.contains('listening') ? recognition.stop() : recognition.start();
+            });
+
+            recognition.onstart = () => micBtn.classList.add('listening');
+            recognition.onend = () => micBtn.classList.remove('listening');
+
+            recognition.onresult = (event) => {
+                const transcript = event.results[0][0].transcript.toLowerCase().trim();
+                handleNavigation(transcript);
+            };
+
+            const handleNavigation = (command) => {
+                const commands = {
+                    'dashboard': 'dashboard.html', 'rent': 'rent-bills.html', 'bills': 'rent-bills.html',
+                    'chores': 'chore-schedule.html', 'schedule': 'chore-schedule.html', 'expense': 'expense-tracker.html',
+                    'tracker': 'expense-tracker.html', 'assistant': 'ai-assistant.html', 'guest': 'guest-log.html',
+                    'maintenance': 'maintenance.html', 'settings': 'settings.html'
+                };
+                for (const key in commands) {
+                    if (command.includes(key)) { window.location.href = commands[key]; return; }
+                }
+                alert(`Command not recognized: "${command}"`);
+            };
+        } else {
+            micBtn.style.display = 'none';
+        }
+
+        // --- Hand Gesture Logic ---
+        async function initGestureControls() {
+            const video = document.getElementById('gesture-video');
+            const indicator = document.getElementById('gesture-indicator');
+            let model, gestureEstimator, lastGesture = null, gestureTimeout;
+
+            const showIndicator = (gesture) => {
+                indicator.textContent = gesture;
+                indicator.style.opacity = 1;
+                clearTimeout(gestureTimeout);
+                gestureTimeout = setTimeout(() => { indicator.style.opacity = 0; }, 1500);
+            };
+
+            const { GestureDescription, Finger, FingerCurl } = window.fp;
+            const openPalmGesture = new GestureDescription('open_palm');
+            for(let finger of [Finger.Thumb, Finger.Index, Finger.Middle, Finger.Ring, Finger.Pinky]) { openPalmGesture.addCurl(finger, FingerCurl.NoCurl, 1.0); }
+            const victoryGesture = new GestureDescription('victory');
+            victoryGesture.addCurl(Finger.Index, FingerCurl.NoCurl, 1.0); victoryGesture.addCurl(Finger.Middle, FingerCurl.NoCurl, 1.0);
+            victoryGesture.addCurl(Finger.Thumb, FingerCurl.HalfCurl, 0.5); victoryGesture.addCurl(Finger.Ring, FingerCurl.FullCurl, 1.0); victoryGesture.addCurl(Finger.Pinky, FingerCurl.FullCurl, 1.0);
+            const iLoveYouGesture = new GestureDescription('i_love_you');
+            iLoveYouGesture.addCurl(Finger.Thumb, FingerCurl.NoCurl, 1.0); iLoveYouGesture.addCurl(Finger.Index, FingerCurl.NoCurl, 1.0); iLoveYouGesture.addCurl(Finger.Pinky, FingerCurl.NoCurl, 1.0);
+            iLoveYouGesture.addCurl(Finger.Middle, FingerCurl.FullCurl, 1.0); iLoveYouGesture.addCurl(Finger.Ring, FingerCurl.FullCurl, 1.0);
+            const pointingUpGesture = new GestureDescription('pointing_up');
+            pointingUpGesture.addCurl(Finger.Index, FingerCurl.NoCurl, 1.0); pointingUpGesture.addCurl(Finger.Thumb, FingerCurl.HalfCurl, 0.8);
+            for(let finger of [Finger.Middle, Finger.Ring, Finger.Pinky]) { pointingUpGesture.addCurl(finger, FingerCurl.FullCurl, 1.0); }
+            const threeFingersUpGesture = new GestureDescription('three_fingers_up');
+            threeFingersUpGesture.addCurl(Finger.Index, FingerCurl.NoCurl, 1.0); threeFingersUpGesture.addCurl(Finger.Middle, FingerCurl.NoCurl, 1.0); threeFingersUpGesture.addCurl(Finger.Ring, FingerCurl.NoCurl, 1.0);
+            threeFingersUpGesture.addCurl(Finger.Thumb, FingerCurl.FullCurl, 1.0); threeFingersUpGesture.addCurl(Finger.Pinky, FingerCurl.FullCurl, 1.0);
+            const knownGestures = [openPalmGesture, victoryGesture, iLoveYouGesture, pointingUpGesture, threeFingersUpGesture];
+            gestureEstimator = new window.fp.GestureEstimator(knownGestures);
+            try { const stream = await navigator.mediaDevices.getUserMedia({ video: true }); video.srcObject = stream; video.play(); model = await handpose.load(); setInterval(predictGestures, 200); } catch (err) { console.error("Error accessing webcam or loading model:", err); }
+            async function predictGestures() { const predictions = await model.estimateHands(video); if (predictions.length > 0) { const estimatedGestures = gestureEstimator.estimate(predictions[0].landmarks, 8.5); if (estimatedGestures.gestures.length > 0) { const bestGesture = estimatedGestures.gestures[0]; if (bestGesture.name !== lastGesture) { lastGesture = bestGesture.name; handleGestureAction(bestGesture.name); } } } else { lastGesture = null; } }
+            function handleGestureAction(gestureName) { const navLinks = Array.from(document.querySelectorAll('.sidebar a')); const activeIndex = navLinks.findIndex(link => link.classList.contains('active')); if (gestureName === 'victory') { showIndicator('✌️'); const nextIndex = (activeIndex + 1) % navLinks.length; window.location.href = navLinks[nextIndex].href; } else if (gestureName === 'open_palm') { showIndicator('🖐️'); const prevIndex = (activeIndex - 1 + navLinks.length) % navLinks.length; window.location.href = navLinks[prevIndex].href; } else if (gestureName === 'pointing_up') { showIndicator('☝️'); document.getElementById('mic-btn').click(); } else if (gestureName === 'three_fingers_up') { showIndicator('👌'); document.body.classList.toggle('sidebar-collapsed'); } else if (gestureName === 'i_love_you') { showIndicator('🤟'); document.getElementById('theme-toggle').click(); } }
+        }
+        initGestureControls();
+    </script>
+
+</body>
+</html>

@@ -1,0 +1,807 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title data-translate="chore_schedule_title">Chore Schedule - Co-Live Hub</title>
+    <!-- Gesture Recognition Libraries -->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-converter"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/handpose"></script>
+    <script src="https://cdn.jsdelivr.net/npm/fingerpose@0.1.0/dist/fingerpose.min.js"></script>
+
+    <style>
+        :root {
+            --bg-color: #f4f7f6;
+            --widget-bg: white;
+            --text-color: #333;
+            --header-bg: #2c3e50;
+            --sidebar-bg: #34495e;
+            --accent-color: #1abc9c;
+            --border-color: #ecf0f1;
+        }
+
+        body.dark-theme {
+            --bg-color: #2c3e50;
+            --widget-bg: #34495e;
+            --text-color: #ecf0f1;
+            --header-bg: #1a252f;
+            --sidebar-bg: #2c3e50;
+            --accent-color: #1abc9c;
+            --border-color: #4a627a;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            margin: 0;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            transition: background-color 0.3s, color 0.3s;
+        }
+
+        .header {
+            background: var(--header-bg);
+            color: white;
+            padding: 10px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            border-bottom: 1px solid var(--border-color);
+            z-index: 1000;
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+        }
+        
+        .header .logo {
+            font-weight: bold;
+            font-size: 1.5em;
+        }
+
+        .main-container {
+            display: flex;
+        }
+
+        .sidebar {
+            width: 220px;
+            background: var(--sidebar-bg);
+            height: 100vh;
+            transition: transform 0.3s ease-in-out;
+        }
+
+        body.sidebar-collapsed .sidebar {
+            width: 80px;
+        }
+
+        .sidebar ul {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .sidebar a {
+            display: block;
+            padding: 15px 20px;
+            color: white;
+            text-decoration: none;
+            border-bottom: 1px solid var(--header-bg);
+            transition: background 0.3s;
+        }
+
+        body.sidebar-collapsed .sidebar a {
+            text-align: center;
+        }
+
+        .sidebar a:hover, .sidebar a.active {
+            background: var(--accent-color);
+        }
+
+        .content {
+            flex-grow: 1;
+            padding: 30px;
+            transition: margin-left 0.3s ease-in-out;
+        }
+
+        body.sidebar-collapsed .content {
+            margin-left: -140px; /* 220px (original width) - 80px (collapsed width) */
+        }
+
+        .widget {
+            background: var(--widget-bg);
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+
+        .widget h2 {
+            margin-top: 0;
+            border-bottom: 2px solid var(--border-color);
+            padding-bottom: 10px;
+            color: var(--text-color);
+        }
+
+        .widget {
+            animation: fadeIn 0.5s ease-in-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .status {
+            padding: 3px 8px;
+            border-radius: 12px;
+            font-size: 0.8em;
+            font-weight: bold;
+            color: white;
+        }
+        .status.completed { background-color: #2ecc71; }
+        .status.pending { background-color: #f39c12; }
+
+        .btn {
+            padding: 10px 15px;
+            border: none;
+            border-radius: 5px;
+            color: white;
+            cursor: pointer;
+            text-decoration: none;
+            font-size: 0.9em;
+        }
+
+        .btn-primary { background-color: #3498db; }
+        .btn-secondary { background-color: #95a5a6; }
+
+        /* Form Styles */
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            align-items: flex-end;
+        }
+        .form-group {
+            display: flex;
+            flex-direction: column;
+        }
+        .form-group label {
+            margin-bottom: 5px;
+            font-weight: bold;
+            font-size: 0.9em;
+        }
+        .form-group input, .form-group select {
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            font-size: 1em;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .form-group input:focus, .form-group select:focus {
+            outline: none;
+            border-color: #3498db;
+            box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
+        }
+
+        /* Table Styles */
+        .chore-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        .chore-table th, .chore-table td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+        }
+        .chore-table th {
+            background-color: var(--bg-color);
+            font-weight: 600;
+            font-size: 0.9em;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        #mic-btn {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 1.5em;
+            cursor: pointer;
+            margin-left: 15px;
+        }
+        #mic-btn.listening {
+            color: #e74c3c;
+            animation: pulse 1.5s infinite;
+        }
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.2); }
+            100% { transform: scale(1); }
+        }
+
+        #language-selector {
+            background-color: var(--sidebar-bg);
+            color: white;
+            border: 1px solid var(--border-color);
+            border-radius: 5px;
+            padding: 5px;
+            margin-left: 15px;
+            font-family: inherit;
+            cursor: pointer;
+        }
+
+        #gesture-video {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            width: 160px;
+            height: 120px; /* Maintain 4:3 aspect ratio */
+            border: 3px solid var(--accent-color);
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+            transform: scaleX(-1); /* Mirror view for intuitive movement */
+            object-fit: cover;
+            z-index: 2001; /* Ensure it's on top */
+        }
+
+        #gesture-indicator {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            font-size: 3em;
+            opacity: 0;
+            transition: opacity 0.5s, transform 0.5s;
+        }
+
+        .sidebar-toggle, #theme-toggle {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 1.5em;
+            cursor: pointer;
+            margin-right: 15px;
+        }
+
+        #theme-toggle {
+            margin-right: 0;
+            margin-left: 15px;
+        }
+
+     
+
+        .nav-icon {
+            margin-right: 10px;
+            font-size: 1.1em;
+        }
+
+        body.sidebar-collapsed .sidebar .nav-icon {
+            margin-right: 0;
+        }
+
+        body.sidebar-collapsed .sidebar a span:not(.nav-icon) {
+            display: none;
+        }
+
+        /* Responsive Styles */
+        @media (max-width: 768px) {
+            .main-container {
+                flex-direction: column;
+            }
+            .sidebar {
+                position: fixed;
+                left: 0;
+                top: 0;
+                height: 100%;
+                transform: translateX(-100%);
+                z-index: 1001;
+            }
+            .sidebar.open {
+                transform: translateX(0);
+            }
+            .sidebar-toggle {
+                display: block; /* Shown on mobile */
+            }
+            .content {
+                padding: 20px;
+            }
+            .form-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <script>
+        // Protect this page: if the user is not logged in, redirect to login.html
+        if (sessionStorage.getItem('isLoggedIn') !== 'true') {
+            window.location.href = 'login.html';
+        }
+    </script>
+
+    <div class="header">
+        <div class="header-left">
+            <button class="sidebar-toggle" id="sidebar-toggle">☰</button>
+            <div class="logo" data-translate="app_title">Co-Live Hub</div>
+        </div>
+        <div style="display: flex; align-items: center;">
+            <span id="username-display" data-translate="welcome_message">Welcome, Alex!</span>
+            <button id="theme-toggle">🌙</button>
+            <button id="mic-btn">🎤</button>
+            <select id="language-selector">
+                <option value="en">English</option>
+                <option value="es">Español</option>
+                <option value="hi">हिन्दी</option>
+                <option value="te">తెలుగు</option>
+            </select>
+        </div>
+    </div>
+
+    <!-- Hidden video element for gesture detection -->
+    <video id="gesture-video" playsinline></video>
+    <div id="gesture-indicator"></div>
+
+    <div class="main-container">
+        <nav class="sidebar" id="sidebar">
+            <ul>
+                <li><a href="dashboard.html"><span class="nav-icon">📊</span><span data-translate="nav_dashboard">Dashboard</span></a></li>
+                <li><a href="ai-assistant.html"><span class="nav-icon">🤖</span><span data-translate="nav_ai_assistant">AI Assistant</span></a></li>
+                <li><a href="expense-tracker.html"><span class="nav-icon">🧾</span><span data-translate="nav_expense_tracker">Expense Tracker</span></a></li>
+                <li><a href="rent-bills.html"><span class="nav-icon">💰</span><span data-translate="nav_rent_bills">Rent & Bills</span></a></li>
+                <li><a href="chore-schedule.html" class="active"><span class="nav-icon">🧹</span><span data-translate="nav_chore_schedule">Chore Schedule</span></a></li>
+                <li><a href="guest-log.html"><span class="nav-icon">👥</span><span data-translate="nav_guest_log">Guest Log</span></a></li>
+                <li><a href="maintenance.html"><span class="nav-icon">🔧</span><span data-translate="nav_maintenance">Maintenance</span></a></li>
+                <li><a href="settings.html"><span class="nav-icon">⚙️</span><span data-translate="nav_settings">Settings</span></a></li>
+                <li><a href="logout.html"><span class="nav-icon">🚪</span><span data-translate="nav_logout">Logout</span></a></li>
+            </ul>
+        </nav>
+
+        <main class="content">
+            <div class="widget">
+                <h2 data-translate="assign_chore_title">Assign a New Chore</h2>
+                <form id="assign-chore-form" class="form-grid">
+                    <div class="form-group">
+                        <label for="chore-template" data-translate="form_chore_template">Chore Template</label>
+                        <select id="chore-template" name="chore-template">
+                            <option value="Clean Kitchen">Clean Kitchen</option>
+                            <option value="Take out Trash">Take out Trash</option>
+                            <option value="Clean Bathroom">Clean Bathroom</option>
+                            <option value="Buy Groceries">Buy Groceries</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="assignee" data-translate="form_assign_to">Assign To</label>
+                        <select id="assignee" name="assignee">
+                            <option value="Alex">Alex (Manual)</option>
+                            <option value="Ben">Ben (Manual)</option>
+                            <option value="random" data-translate="option_assign_randomly">Assign Randomly</option>
+                            <option value="rotation" data-translate="option_next_in_rotation">Next in Rotation</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="due-date" data-translate="form_due_date">Due Date</label>
+                        <input type="date" id="due-date" name="due-date">
+                    </div>
+                    <button type="submit" class="btn btn-primary" data-translate="form_assign_chore_button">Assign Chore</button>
+                </form>
+            </div>
+
+            <div class="widget">
+                <h2 data-translate="current_schedule_title">Current Chore Schedule</h2>
+                <table class="chore-table">
+                    <thead>
+                        <tr>
+                            <th data-translate="table_chore">Chore</th>
+                            <th data-translate="table_assigned_to">Assigned To</th>
+                            <th data-translate="table_due_date">Due Date</th>
+                            <th data-translate="table_status">Status</th>
+                            <th data-translate="table_action">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="chore-schedule-body">
+                        <tr>
+                            <td>Take out the trash</td>
+                            <td>Alex</td>
+                            <td>Nov 11, 2025</td>
+                            <td><span class="status pending">PENDING</span></td>
+                            <td><button class="btn btn-secondary">Mark as Done</button></td>
+                        </tr>
+                        <tr>
+                            <td>Clean the kitchen</td>
+                            <td>Ben</td>
+                            <td>Nov 13, 2025</td>
+                            <td><span class="status pending">PENDING</span></td>
+                            <td><button class="btn btn-secondary">Mark as Done</button></td>
+                        </tr>
+                        <tr>
+                            <td>Clean Bathroom</td>
+                            <td>Alex</td>
+                            <td>Nov 4, 2025</td>
+                            <td><span class="status completed">COMPLETED</span></td>
+                            <td>-</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        const choresDB = {
+            getChores: () => {
+                const chores = localStorage.getItem('chores');
+                return chores ? JSON.parse(chores) : [
+                    { id: 1, description: 'Take out the trash', assignee: 'Alex', dueDate: 'Nov 11, 2025', status: 'pending' },
+                    { id: 2, description: 'Clean the kitchen', assignee: 'Ben', dueDate: 'Nov 13, 2025', status: 'pending' },
+                    { id: 3, description: 'Clean Bathroom', assignee: 'Alex', dueDate: 'Nov 4, 2025', status: 'completed' },
+                ];
+            },
+            saveChores: (chores) => {
+                localStorage.setItem('chores', JSON.stringify(chores));
+            }
+        };
+
+        const renderChores = () => {
+            const chores = choresDB.getChores();
+            const tableBody = document.getElementById('chore-schedule-body');
+            tableBody.innerHTML = '';
+
+            chores.sort((a, b) => new Date(b.dueDate) - new Date(a.dueDate)); // Show newest first
+
+            chores.forEach(chore => {
+                const newRow = tableBody.insertRow();
+                newRow.setAttribute('data-id', chore.id);
+                newRow.innerHTML = `
+                    <td>${chore.description}</td>
+                    <td>${chore.assignee}</td>
+                    <td>${chore.dueDate}</td>
+                    <td><span class="status ${chore.status}">${chore.status.toUpperCase()}</span></td>
+                    <td>
+                        ${chore.status === 'pending' ? `<button class="btn btn-secondary">Mark as Done</button>` : '-'}
+                    </td>
+                `;
+            });
+        };
+
+        document.getElementById('assign-chore-form').addEventListener('submit', function(event) {
+            event.preventDefault();
+
+            const choreTemplate = document.getElementById('chore-template').value;
+            const assigneeSelection = document.getElementById('assignee').value;
+            const dueDateInput = document.getElementById('due-date').value;
+
+            if (!choreTemplate || !assigneeSelection || !dueDateInput) {
+                alert('Please fill out all fields.');
+                return;
+            }
+
+            const roommates = ['Alex', 'Ben'];
+            let assignedRoommate;
+            if (assigneeSelection === 'random') {
+                assignedRoommate = roommates[Math.floor(Math.random() * roommates.length)];
+            } else if (assigneeSelection === 'rotation') {
+                // Simple rotation: find who had the oldest chore and assign to the other person.
+                const allChores = choresDB.getChores();
+                const lastChore = allChores.sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate))[0];
+                assignedRoommate = lastChore && lastChore.assignee === 'Alex' ? 'Ben' : 'Alex';
+            } else {
+                assignedRoommate = assigneeSelection;
+            }
+
+            const dueDate = new Date(dueDateInput + 'T00:00:00');
+            const formattedDate = dueDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+
+            const allChores = choresDB.getChores();
+            const newChore = {
+                id: allChores.length > 0 ? Math.max(...allChores.map(c => c.id)) + 1 : 1,
+                description: choreTemplate,
+                assignee: assignedRoommate,
+                dueDate: formattedDate,
+                status: 'pending'
+            };
+
+            allChores.push(newChore);
+            choresDB.saveChores(allChores);
+            renderChores();
+            this.reset();
+        });
+
+        document.getElementById('chore-schedule-body').addEventListener('click', function(event) {
+            if (event.target && event.target.classList.contains('btn-secondary')) {
+                const row = event.target.closest('tr');
+                const choreId = parseInt(row.getAttribute('data-id'));
+
+                const allChores = choresDB.getChores();
+                const choreToUpdate = allChores.find(c => c.id === choreId);
+                if (choreToUpdate) {
+                    choreToUpdate.status = 'completed';
+                    choresDB.saveChores(allChores);
+                    renderChores();
+                }
+            }
+        });
+
+        // --- Shared Sidebar & Theme Logic ---
+        const sidebarToggle = document.getElementById('sidebar-toggle');
+        const sidebar = document.getElementById('sidebar');
+        const themeToggle = document.getElementById('theme-toggle');
+        const langSelector = document.getElementById('language-selector');
+
+        const translations = {
+            en: {
+                chore_schedule_title: "Chore Schedule - Co-Live Hub",
+                app_title: "Co-Live Hub",
+                welcome_message: "Welcome, {username}!",
+                nav_dashboard: "Dashboard",
+                nav_ai_assistant: "AI Assistant",
+                nav_rent_bills: "Rent & Bills",
+                nav_chore_schedule: "Chore Schedule",
+                nav_guest_log: "Guest Log",
+                nav_maintenance: "Maintenance",
+                nav_settings: "Settings",
+                nav_logout: "Logout",
+                assign_chore_title: "Assign a New Chore",
+                form_chore_template: "Chore Template",
+                form_assign_to: "Assign To",
+                option_assign_randomly: "Assign Randomly",
+                option_next_in_rotation: "Next in Rotation",
+                form_due_date: "Due Date",
+                form_assign_chore_button: "Assign Chore",
+                current_schedule_title: "Current Chore Schedule",
+                table_chore: "Chore",
+                table_assigned_to: "Assigned To",
+                table_due_date: "Due Date",
+                table_status: "Status",
+                table_action: "Action",
+            },
+            es: {
+                chore_schedule_title: "Horario de Tareas - Co-Live Hub",
+                app_title: "Co-Live Hub",
+                welcome_message: "¡Bienvenido, {username}!",
+                nav_dashboard: "Tablero",
+                nav_ai_assistant: "Asistente IA",
+                nav_rent_bills: "Alquiler y Cuentas",
+                nav_chore_schedule: "Horario de Tareas",
+                nav_guest_log: "Registro de Invitados",
+                nav_maintenance: "Mantenimiento",
+                nav_settings: "Configuración",
+                nav_logout: "Cerrar Sesión",
+                assign_chore_title: "Asignar una Nueva Tarea",
+                form_chore_template: "Plantilla de Tarea",
+                form_assign_to: "Asignar A",
+                option_assign_randomly: "Asignar Aleatoriamente",
+                option_next_in_rotation: "Siguiente en Rotación",
+                form_due_date: "Fecha de Vencimiento",
+                form_assign_chore_button: "Asignar Tarea",
+                current_schedule_title: "Horario de Tareas Actual",
+                table_chore: "Tarea",
+                table_assigned_to: "Asignado A",
+                table_due_date: "Fecha de Vencimiento",
+                table_status: "Estado",
+                table_action: "Acción",
+            },
+            hi: {
+                chore_schedule_title: "काम का शेड्यूल - को-लिव हब",
+                app_title: "को-लिव हब",
+                welcome_message: "नमस्ते, {username}!",
+                nav_dashboard: "डैशबोर्ड",
+                nav_ai_assistant: "एआई सहायक",
+                nav_rent_bills: "किराया और बिल",
+                nav_chore_schedule: "काम का शेड्यूल",
+                nav_guest_log: "अतिथि लॉग",
+                nav_maintenance: "रखरखाव",
+                nav_settings: "सेटिंग्स",
+                nav_logout: "लॉग आउट",
+                assign_chore_title: "एक नया काम सौंपें",
+                form_chore_template: "काम का टेम्पलेट",
+                form_assign_to: "किसको सौंपें",
+                option_assign_randomly: "यादृच्छिक रूप से सौंपें",
+                option_next_in_rotation: "रोटेशन में अगला",
+                form_due_date: "देय तिथि",
+                form_assign_chore_button: "काम सौंपें",
+                current_schedule_title: "वर्तमान कार्य अनुसूची",
+                table_chore: "काम",
+                table_assigned_to: "किसको सौंपा गया",
+                table_due_date: "देय तिथि",
+                table_status: "स्थिति",
+                table_action: "कार्रवाई",
+            }
+            ,
+            te: {
+                chore_schedule_title: "పని షెడ్యూల్ - కో-లివ్ హబ్",
+                app_title: "కో-లివ్ హబ్",
+                welcome_message: "స్వాగతం, {username}!",
+                nav_dashboard: "డాష్‌బోర్డ్",
+                nav_rent_bills: "అద్దె & బిల్లులు",
+                nav_ai_assistant: "AI అసిస్టెంట్",
+                nav_chore_schedule: "పని షెడ్యూల్",
+                nav_guest_log: "అతిథి లాగ్",
+                nav_maintenance: "నిర్వహణ",
+                nav_settings: "సెట్టింగ్‌లు",
+                nav_logout: "లాగ్ అవుట్",
+                assign_chore_title: "కొత్త పనిని కేటాయించండి",
+                form_chore_template: "పని టెంప్లేట్",
+                form_assign_to: "ఎవరికి కేటాయించాలి",
+                option_assign_randomly: "యాదృచ్ఛికంగా కేటాయించండి",
+                option_next_in_rotation: "రోటేషన్‌లో తదుపరి",
+                form_due_date: "గడువు తేదీ",
+                form_assign_chore_button: "పని కేటాయించండి",
+                current_schedule_title: "ప్రస్తుత పని షెడ్యూల్",
+                table_chore: "పని",
+                table_assigned_to: "కేటాయించబడింది",
+                table_due_date: "గడువు తేదీ",
+                table_status: "స్థితి",
+                table_action: "చర్య",
+            }
+        };
+
+        sidebarToggle.addEventListener('click', () => {
+            document.body.classList.toggle('sidebar-collapsed');
+        });
+
+        document.addEventListener('click', (event) => {
+            if (window.innerWidth <= 768 && sidebar.classList.contains('open')) {
+                if (!sidebar.contains(event.target) && !sidebarToggle.contains(event.target)) {
+                    sidebar.classList.remove('open');
+                }
+            }
+        });
+
+        themeToggle.addEventListener('click', () => {
+            document.body.classList.toggle('dark-theme');
+            const isDark = document.body.classList.contains('dark-theme');
+            localStorage.setItem('theme', isDark ? 'dark' : 'light');
+            themeToggle.textContent = isDark ? '☀️' : '🌙';
+        });
+
+        const setLanguage = (lang) => {
+            document.documentElement.lang = lang;
+            localStorage.setItem('language', lang);
+            langSelector.value = lang;
+
+            document.querySelectorAll('[data-translate]').forEach(el => {
+                const key = el.getAttribute('data-translate');
+                let translation = translations[lang][key] || translations['en'][key];
+
+                if (key === 'welcome_message') {
+                    const username = sessionStorage.getItem('username') || 'Alex';
+                    translation = translation.replace('{username}', username);
+                }
+
+                el.textContent = translation;
+            });
+        };
+
+        langSelector.addEventListener('change', (event) => {
+            setLanguage(event.target.value);
+        });
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const savedTheme = localStorage.getItem('theme');
+            if (savedTheme === 'dark') {
+                document.body.classList.add('dark-theme');
+                themeToggle.textContent = '☀️';
+            } else {
+                themeToggle.textContent = '🌙';
+            }
+
+            renderChores();
+
+            const savedLang = localStorage.getItem('language') || 'en';
+            setLanguage(savedLang);
+
+            // Set username in header
+            const username = sessionStorage.getItem('username');
+            if (username) {
+                document.getElementById('username-display').textContent = `Welcome, ${username}!`;
+            }
+            initGestureControls();
+        });
+
+        // --- Voice Navigation Logic ---
+        const micBtn = document.getElementById('mic-btn');
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+        if (SpeechRecognition) {
+            const recognition = new SpeechRecognition();
+
+            micBtn.addEventListener('click', () => {
+                micBtn.classList.contains('listening') ? recognition.stop() : recognition.start();
+            });
+
+            recognition.onstart = () => micBtn.classList.add('listening');
+            recognition.onend = () => micBtn.classList.remove('listening');
+
+            recognition.onresult = (event) => {
+                const transcript = event.results[0][0].transcript.toLowerCase().trim();
+                handleNavigation(transcript);
+            };
+
+            const handleNavigation = (command) => {
+                const commands = {
+                    'dashboard': 'dashboard.html', 'rent': 'rent-bills.html', 'bills': 'rent-bills.html',
+                    'chores': 'chore-schedule.html', 'schedule': 'chore-schedule.html', 'expense': 'expense-tracker.html',
+                    'tracker': 'expense-tracker.html', 'assistant': 'ai-assistant.html', 'guest': 'guest-log.html',
+                    'maintenance': 'maintenance.html', 'settings': 'settings.html'
+                };
+                for (const key in commands) {
+                    if (command.includes(key)) { window.location.href = commands[key]; return; }
+                }
+                alert(`Command not recognized: "${command}"`);
+            };
+        } else {
+            micBtn.style.display = 'none';
+        }
+
+        // --- Hand Gesture Logic ---
+        async function initGestureControls() {
+            const video = document.getElementById('gesture-video');
+            const indicator = document.getElementById('gesture-indicator');
+            let model, gestureEstimator, lastGesture = null, gestureTimeout;
+
+            const showIndicator = (gesture) => {
+                indicator.textContent = gesture;
+                indicator.style.opacity = 1;
+                clearTimeout(gestureTimeout);
+                gestureTimeout = setTimeout(() => { indicator.style.opacity = 0; }, 1500);
+            };
+
+            const { GestureDescription, Finger, FingerCurl } = window.fp;
+
+            const openPalmGesture = new GestureDescription('open_palm');
+            for(let finger of [Finger.Thumb, Finger.Index, Finger.Middle, Finger.Ring, Finger.Pinky]) { openPalmGesture.addCurl(finger, FingerCurl.NoCurl, 1.0); }
+
+            const victoryGesture = new GestureDescription('victory');
+            victoryGesture.addCurl(Finger.Index, FingerCurl.NoCurl, 1.0); victoryGesture.addCurl(Finger.Middle, FingerCurl.NoCurl, 1.0);
+            victoryGesture.addCurl(Finger.Thumb, FingerCurl.HalfCurl, 0.5); victoryGesture.addCurl(Finger.Ring, FingerCurl.FullCurl, 1.0); victoryGesture.addCurl(Finger.Pinky, FingerCurl.FullCurl, 1.0);
+
+            const iLoveYouGesture = new GestureDescription('i_love_you');
+            iLoveYouGesture.addCurl(Finger.Thumb, FingerCurl.NoCurl, 1.0); iLoveYouGesture.addCurl(Finger.Index, FingerCurl.NoCurl, 1.0); iLoveYouGesture.addCurl(Finger.Pinky, FingerCurl.NoCurl, 1.0);
+            iLoveYouGesture.addCurl(Finger.Middle, FingerCurl.FullCurl, 1.0); iLoveYouGesture.addCurl(Finger.Ring, FingerCurl.FullCurl, 1.0);
+
+            const pointingUpGesture = new GestureDescription('pointing_up');
+            pointingUpGesture.addCurl(Finger.Index, FingerCurl.NoCurl, 1.0);
+            pointingUpGesture.addCurl(Finger.Thumb, FingerCurl.HalfCurl, 0.8);
+            for(let finger of [Finger.Middle, Finger.Ring, Finger.Pinky]) { pointingUpGesture.addCurl(finger, FingerCurl.FullCurl, 1.0); }
+
+            const threeFingersUpGesture = new GestureDescription('three_fingers_up');
+            threeFingersUpGesture.addCurl(Finger.Index, FingerCurl.NoCurl, 1.0); threeFingersUpGesture.addCurl(Finger.Middle, FingerCurl.NoCurl, 1.0); threeFingersUpGesture.addCurl(Finger.Ring, FingerCurl.NoCurl, 1.0);
+            threeFingersUpGesture.addCurl(Finger.Thumb, FingerCurl.FullCurl, 1.0); threeFingersUpGesture.addCurl(Finger.Pinky, FingerCurl.FullCurl, 1.0);
+
+            const knownGestures = [openPalmGesture, victoryGesture, iLoveYouGesture, pointingUpGesture, threeFingersUpGesture];
+            gestureEstimator = new window.fp.GestureEstimator(knownGestures);
+
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                video.srcObject = stream; video.play(); model = await handpose.load(); setInterval(predictGestures, 200);
+            } catch (err) { console.error("Error accessing webcam or loading model:", err); }
+
+            async function predictGestures() {
+                const predictions = await model.estimateHands(video);
+                if (predictions.length > 0) {
+                    const estimatedGestures = gestureEstimator.estimate(predictions[0].landmarks, 8.5);
+                    if (estimatedGestures.gestures.length > 0) {
+                        const bestGesture = estimatedGestures.gestures[0];
+                        if (bestGesture.name !== lastGesture) { lastGesture = bestGesture.name; handleGestureAction(bestGesture.name); }
+                    }
+                } else { lastGesture = null; }
+            }
+
+            function handleGestureAction(gestureName) {
+                const navLinks = Array.from(document.querySelectorAll('.sidebar a'));
+                const activeIndex = navLinks.findIndex(link => link.classList.contains('active'));
+                if (gestureName === 'victory') { showIndicator('✌️'); const nextIndex = (activeIndex + 1) % navLinks.length; window.location.href = navLinks[nextIndex].href; }
+                else if (gestureName === 'open_palm') { showIndicator('🖐️'); const prevIndex = (activeIndex - 1 + navLinks.length) % navLinks.length; window.location.href = navLinks[prevIndex].href; }
+                else if (gestureName === 'pointing_up') { showIndicator('☝️'); document.getElementById('mic-btn').click(); }
+                else if (gestureName === 'three_fingers_up') { showIndicator('👌'); document.body.classList.toggle('sidebar-collapsed'); }
+                else if (gestureName === 'i_love_you') { showIndicator('🤟'); document.getElementById('theme-toggle').click(); }
+            }
+        }
+    </script>
+</body>
+</html>

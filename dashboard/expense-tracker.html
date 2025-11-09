@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title data-translate="expense_tracker_title">Expense Tracker - Co-Live Hub</title>
+    <!-- Gesture Recognition Libraries -->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-converter"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/handpose"></script>
+    <script src="https://cdn.jsdelivr.net/npm/fingerpose@0.1.0/dist/fingerpose.min.js"></script>
+
+    <style>
+        :root {
+            --bg-color: #f4f7f6;
+            --widget-bg: white;
+            --text-color: #333;
+            --header-bg: #2c3e50;
+            --sidebar-bg: #34495e;
+            --accent-color: #1abc9c;
+            --border-color: #ecf0f1;
+        }
+
+        body.dark-theme {
+            --bg-color: #2c3e50;
+            --widget-bg: #34495e;
+            --text-color: #ecf0f1;
+            --header-bg: #1a252f;
+            --sidebar-bg: #2c3e50;
+            --accent-color: #1abc9c;
+            --border-color: #4a627a;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            margin: 0;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            transition: background-color 0.3s, color 0.3s;
+        }
+
+        .header {
+            background: var(--header-bg);
+            color: white;
+            padding: 10px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            border-bottom: 1px solid var(--border-color);
+            z-index: 1000;
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+        }
+        
+        .header .logo {
+            font-weight: bold;
+            font-size: 1.5em;
+        }
+
+        .main-container {
+            display: flex;
+        }
+
+        .sidebar {
+            width: 220px;
+            background: var(--sidebar-bg);
+            height: 100vh;
+            transition: transform 0.3s ease-in-out;
+        }
+
+        body.sidebar-collapsed .sidebar {
+            width: 80px;
+        }
+
+        .sidebar ul {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .sidebar a {
+            display: block;
+            padding: 15px 20px;
+            color: white;
+            text-decoration: none;
+            border-bottom: 1px solid var(--header-bg);
+            transition: background 0.3s;
+        }
+
+        body.sidebar-collapsed .sidebar a {
+            text-align: center;
+        }
+
+        .sidebar a:hover, .sidebar a.active {
+            background: var(--accent-color);
+        }
+
+        .content {
+            flex-grow: 1;
+            padding: 30px;
+            transition: margin-left 0.3s ease-in-out;
+        }
+
+        body.sidebar-collapsed .content {
+            margin-left: -140px;
+        }
+
+        .widget {
+            background: var(--widget-bg);
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+            animation: fadeIn 0.5s ease-in-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .widget h2 {
+            margin-top: 0;
+            border-bottom: 2px solid var(--border-color);
+            padding-bottom: 10px;
+            color: var(--text-color);
+        }
+
+        .btn {
+            padding: 10px 15px;
+            border: none;
+            border-radius: 5px;
+            color: white;
+            cursor: pointer;
+            text-decoration: none;
+            font-size: 0.9em;
+        }
+
+        .btn-primary { background-color: #3498db; }
+        .btn-danger { background-color: #e74c3c; }
+
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            align-items: flex-end;
+        }
+        .form-group {
+            display: flex;
+            flex-direction: column;
+        }
+        .form-group label {
+            margin-bottom: 5px;
+            font-weight: bold;
+            font-size: 0.9em;
+        }
+        .form-group input, .form-group select {
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            font-size: 1em;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .form-group input:focus, .form-group select:focus {
+            outline: none;
+            border-color: #3498db;
+            box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
+        }
+
+        .expense-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        .expense-table th, .expense-table td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+        }
+        .expense-table th {
+            background-color: var(--bg-color);
+            font-weight: 600;
+            font-size: 0.9em;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .summary-container {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        .category-summary {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        .category-name {
+            width: 100px;
+            font-weight: bold;
+        }
+        .bar-container {
+            flex-grow: 1;
+            background-color: var(--border-color);
+            border-radius: 5px;
+            overflow: hidden;
+        }
+        .bar {
+            background-color: var(--accent-color);
+            height: 20px;
+            border-radius: 5px;
+            transition: width 0.5s ease-in-out;
+        }
+
+        #language-selector {
+            background-color: var(--sidebar-bg);
+            color: white;
+            border: 1px solid var(--border-color);
+            border-radius: 5px;
+            padding: 5px;
+            margin-left: 15px;
+            font-family: inherit;
+            cursor: pointer;
+        }
+
+        #gesture-video {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            width: 160px;
+            height: 120px;
+            border: 3px solid var(--accent-color);
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+            transform: scaleX(-1);
+            object-fit: cover;
+            z-index: 2001;
+        }
+
+        .sidebar-toggle, #theme-toggle {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 1.5em;
+            cursor: pointer;
+            margin-right: 15px;
+        }
+
+        #theme-toggle {
+            margin-right: 0;
+            margin-left: 15px;
+        }
+
+        .sidebar-toggle {
+            /* Always visible */
+        }
+
+        .nav-icon {
+            margin-right: 10px;
+            font-size: 1.1em;
+        }
+
+        body.sidebar-collapsed .sidebar .nav-icon {
+            margin-right: 0;
+        }
+
+        body.sidebar-collapsed .sidebar a span:not(.nav-icon) {
+            display: none;
+        }
+
+        @media (max-width: 768px) {
+            .main-container { flex-direction: column; }
+            .sidebar {
+                position: fixed;
+                left: 0;
+                top: 0;
+                height: 100%;
+                transform: translateX(-100%);
+                z-index: 1001;
+            }
+            .sidebar.open { transform: translateX(0); }
+            .sidebar-toggle { display: block; }
+            .content { padding: 20px; }
+            .form-grid { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+
+    <script>
+        if (sessionStorage.getItem('isLoggedIn') !== 'true') {
+            window.location.href = 'login.html';
+        }
+    </script>
+
+    <div class="header">
+        <div class="header-left">
+            <button class="sidebar-toggle" id="sidebar-toggle">☰</button>
+            <div class="logo" data-translate="app_title">Co-Live Hub</div>
+        </div>
+        <div style="display: flex; align-items: center;">
+            <span id="username-display" data-translate="welcome_message">Welcome, Alex!</span>
+            <button id="theme-toggle">🌙</button>
+            <select id="language-selector">
+                <option value="en">English</option>
+                <option value="es">Español</option>
+                <option value="hi">हिन्दी</option>
+                <option value="te">తెలుగు</option>
+            </select>
+        </div>
+    </div>
+
+    <!-- Hidden video element for gesture detection -->
+    <video id="gesture-video" playsinline></video>
+    <div id="gesture-indicator"></div>
+
+    <div class="main-container">
+        <nav class="sidebar" id="sidebar">
+            <ul>
+                <li><a href="dashboard.html"><span class="nav-icon">📊</span><span data-translate="nav_dashboard">Dashboard</span></a></li>
+                <li><a href="rent-bills.html"><span class="nav-icon">💰</span><span data-translate="nav_rent_bills">Rent & Bills</span></a></li>
+                <li><a href="chore-schedule.html"><span class="nav-icon">🧹</span><span data-translate="nav_chore_schedule">Chore Schedule</span></a></li>
+                <li><a href="expense-tracker.html" class="active"><span class="nav-icon">🧾</span><span data-translate="nav_expense_tracker">Expense Tracker</span></a></li>
+                <li><a href="guest-log.html"><span class="nav-icon">👥</span><span data-translate="nav_guest_log">Guest Log</span></a></li>
+                <li><a href="maintenance.html"><span class="nav-icon">🔧</span><span data-translate="nav_maintenance">Maintenance</span></a></li>
+                <li><a href="settings.html"><span class="nav-icon">⚙️</span><span data-translate="nav_settings">Settings</span></a></li>
+                <li><a href="logout.html"><span class="nav-icon">🚪</span><span data-translate="nav_logout">Logout</span></a></li>
+            </ul>
+        </nav>
+
+        <main class="content">
+            <div class="widget">
+                <h2 data-translate="add_expense_title">Add New Expense</h2>
+                <form id="add-expense-form" class="form-grid">
+                    <div class="form-group">
+                        <label for="expense-description" data-translate="form_description">Description</label>
+                        <input type="text" id="expense-description" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="expense-amount" data-translate="form_amount">Amount</label>
+                        <input type="number" id="expense-amount" step="0.01" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="expense-category" data-translate="form_category">Category</label>
+                        <select id="expense-category">
+                            <option value="Food">Food</option>
+                            <option value="Transport">Transport</option>
+                            <option value="Utilities">Utilities</option>
+                            <option value="Entertainment">Entertainment</option>
+                            <option value="Other">Other</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="btn btn-primary" data-translate="form_add_expense_button">Add Expense</button>
+                </form>
+            </div>
+
+            <div class="widget">
+                <h2 data-translate="summary_title">Expense Summary</h2>
+                <div id="summary-container" class="summary-container"></div>
+            </div>
+
+            <div class="widget">
+                <h2 data-translate="history_title">Expense History</h2>
+                <table class="expense-table">
+                    <thead>
+                        <tr>
+                            <th data-translate="table_description">Description</th>
+                            <th data-translate="table_category">Category</th>
+                            <th data-translate="table_date">Date</th>
+                            <th data-translate="table_amount">Amount</th>
+                            <th data-translate="table_action">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="expense-table-body"></tbody>
+                </table>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        const expensesDB = {
+            getExpenses: () => JSON.parse(localStorage.getItem('expenses') || '[]'),
+            saveExpenses: (expenses) => localStorage.setItem('expenses', JSON.stringify(expenses))
+        };
+
+        const renderAll = () => {
+            renderExpenseTable();
+            renderSummary();
+        };
+
+        const renderExpenseTable = () => {
+            const expenses = expensesDB.getExpenses().sort((a, b) => new Date(b.date) - new Date(a.date));
+            const tableBody = document.getElementById('expense-table-body');
+            tableBody.innerHTML = '';
+            expenses.forEach(expense => {
+                const row = tableBody.insertRow();
+                row.setAttribute('data-id', expense.id);
+                row.innerHTML = `
+                    <td>${expense.description}</td>
+                    <td>${expense.category}</td>
+                    <td>${new Date(expense.date).toLocaleDateString()}</td>
+                    <td>$${expense.amount.toFixed(2)}</td>
+                    <td><button class="btn btn-danger btn-sm">Delete</button></td>
+                `;
+            });
+        };
+
+        const renderSummary = () => {
+            const expenses = expensesDB.getExpenses();
+            const summaryContainer = document.getElementById('summary-container');
+            summaryContainer.innerHTML = '';
+
+            if (expenses.length === 0) {
+                summaryContainer.innerHTML = '<p>No expenses logged yet.</p>';
+                return;
+            }
+
+            const byCategory = expenses.reduce((acc, expense) => {
+                acc[expense.category] = (acc[expense.category] || 0) + expense.amount;
+                return acc;
+            }, {});
+
+            const total = expenses.reduce((sum, exp) => sum + exp.amount, 0);
+
+            for (const category in byCategory) {
+                const percentage = total > 0 ? (byCategory[category] / total) * 100 : 0;
+                const summaryEl = document.createElement('div');
+                summaryEl.className = 'category-summary';
+                summaryEl.innerHTML = `
+                    <div class="category-name">${category}</div>
+                    <div class="bar-container"><div class="bar" style="width: ${percentage}%;"></div></div>
+                    <div class="category-total">$${byCategory[category].toFixed(2)}</div>
+                `;
+                summaryContainer.appendChild(summaryEl);
+            }
+        };
+
+        document.getElementById('add-expense-form').addEventListener('submit', (e) => {
+            e.preventDefault();
+            const expenses = expensesDB.getExpenses();
+            const newExpense = {
+                id: Date.now(),
+                description: document.getElementById('expense-description').value,
+                amount: parseFloat(document.getElementById('expense-amount').value),
+                category: document.getElementById('expense-category').value,
+                date: new Date().toISOString()
+            };
+            expenses.push(newExpense);
+            expensesDB.saveExpenses(expenses);
+            renderAll();
+            e.target.reset();
+        });
+
+        document.getElementById('expense-table-body').addEventListener('click', (e) => {
+            if (e.target.classList.contains('btn-danger')) {
+                const id = parseInt(e.target.closest('tr').getAttribute('data-id'));
+                let expenses = expensesDB.getExpenses();
+                expenses = expenses.filter(exp => exp.id !== id);
+                expensesDB.saveExpenses(expenses);
+                renderAll();
+            }
+        });
+
+        // --- Shared Sidebar & Theme Logic ---
+        const sidebarToggle = document.getElementById('sidebar-toggle');
+        const sidebar = document.getElementById('sidebar');
+        const themeToggle = document.getElementById('theme-toggle');
+        const langSelector = document.getElementById('language-selector');
+
+        const translations = {
+            en: {
+                expense_tracker_title: "Expense Tracker - Co-Live Hub",
+                app_title: "Co-Live Hub",
+                welcome_message: "Welcome, {username}!",
+                nav_dashboard: "Dashboard",
+                nav_rent_bills: "Rent & Bills",
+                nav_chore_schedule: "Chore Schedule",
+                nav_expense_tracker: "Expense Tracker",
+                nav_guest_log: "Guest Log",
+                nav_maintenance: "Maintenance",
+                nav_settings: "Settings",
+                nav_logout: "Logout",
+                add_expense_title: "Add New Expense",
+                form_description: "Description",
+                form_amount: "Amount",
+                form_category: "Category",
+                form_add_expense_button: "Add Expense",
+                summary_title: "Expense Summary",
+                history_title: "Expense History",
+                table_description: "Description",
+                table_category: "Category",
+                table_date: "Date",
+                table_amount: "Amount",
+                table_action: "Action",
+            },
+            // Add other languages here...
+        };
+
+        sidebarToggle.addEventListener('click', () => document.body.classList.toggle('sidebar-collapsed'));
+        document.addEventListener('click', (event) => {
+            if (window.innerWidth <= 768 && sidebar.classList.contains('open')) {
+                if (!sidebar.contains(event.target) && !sidebarToggle.contains(event.target)) {
+                    sidebar.classList.remove('open');
+                }
+            }
+        });
+        themeToggle.addEventListener('click', () => {
+            document.body.classList.toggle('dark-theme');
+            const isDark = document.body.classList.contains('dark-theme');
+            localStorage.setItem('theme', isDark ? 'dark' : 'light');
+            themeToggle.textContent = isDark ? '☀️' : '🌙';
+        });
+        const setLanguage = (lang) => {
+            document.documentElement.lang = lang;
+            localStorage.setItem('language', lang);
+            langSelector.value = lang;
+            document.querySelectorAll('[data-translate]').forEach(el => {
+                const key = el.getAttribute('data-translate');
+                let translation = (translations[lang] && translations[lang][key]) || translations['en'][key];
+                if (key === 'welcome_message') {
+                    const username = sessionStorage.getItem('username') || 'Alex';
+                    translation = translation.replace('{username}', username);
+                }
+                if(translation) el.textContent = translation;
+            });
+        };
+        langSelector.addEventListener('change', (e) => setLanguage(e.target.value));
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const savedTheme = localStorage.getItem('theme');
+            if (savedTheme === 'dark') {
+                document.body.classList.add('dark-theme');
+                themeToggle.textContent = '☀️';
+            } else {
+                themeToggle.textContent = '🌙';
+            }
+            const savedLang = localStorage.getItem('language') || 'en';
+            setLanguage(savedLang);
+            const username = sessionStorage.getItem('username');
+            if (username) {
+                document.getElementById('username-display').textContent = `Welcome, ${username}!`;
+            }
+            renderAll();
+        });
+    </script>
+
+</body>
+</html>

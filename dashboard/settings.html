@@ -1,0 +1,638 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title data-translate="settings_title">Settings - Co-Live Hub</title>
+    <!-- Gesture Recognition Libraries -->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-converter"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/handpose"></script>
+    <script src="https://cdn.jsdelivr.net/npm/fingerpose@0.1.0/dist/fingerpose.min.js"></script>
+
+    <style>
+        :root {
+            --bg-color: #f4f7f6;
+            --widget-bg: white;
+            --text-color: #333;
+            --header-bg: #2c3e50;
+            --sidebar-bg: #34495e;
+            --accent-color: #1abc9c;
+            --border-color: #ecf0f1;
+        }
+
+        body.dark-theme {
+            --bg-color: #2c3e50;
+            --widget-bg: #34495e;
+            --text-color: #ecf0f1;
+            --header-bg: #1a252f;
+            --sidebar-bg: #2c3e50;
+            --accent-color: #1abc9c;
+            --border-color: #4a627a;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            margin: 0;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            transition: background-color 0.3s, color 0.3s;
+        }
+
+        .header {
+            background: var(--header-bg);
+            color: white;
+            padding: 10px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            border-bottom: 1px solid var(--border-color);
+            top: 0;
+            z-index: 1000;
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+        }
+
+        .header .logo {
+            font-weight: bold;
+            font-size: 1.5em;
+        }
+
+        .main-container {
+            display: flex;
+        }
+
+        .sidebar {
+            width: 220px;
+            background: var(--sidebar-bg);
+            height: 100vh;
+            transition: transform 0.3s ease-in-out;
+        }
+
+        body.sidebar-collapsed .sidebar {
+            width: 80px;
+        }
+
+        .sidebar ul {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .sidebar a {
+            display: block;
+            padding: 15px 20px;
+            color: white;
+            text-decoration: none;
+            border-bottom: 1px solid var(--header-bg);
+            transition: background 0.3s;
+        }
+
+        body.sidebar-collapsed .sidebar a {
+            text-align: center;
+        }
+
+        .sidebar a:hover, .sidebar a.active {
+            background: var(--accent-color);
+        }
+
+        .content {
+            flex-grow: 1;
+            padding: 30px;
+            transition: margin-left 0.3s ease-in-out;
+        }
+
+        body.sidebar-collapsed .content {
+            margin-left: -140px; /* 220px (original width) - 80px (collapsed width) */
+        }
+        .widget {
+            background: var(--widget-bg);
+            padding: 25px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .widget h2 {
+            margin-top: 0;
+            border-bottom: 2px solid var(--border-color);
+            padding-bottom: 10px;
+            color: var(--text-color);
+        }
+
+        .btn {
+            padding: 10px 15px;
+            border: none;
+            border-radius: 5px;
+            color: white;
+            cursor: pointer;
+            text-decoration: none;
+            font-size: 1em;
+            display: inline-block;
+            margin-top: 10px;
+        }
+
+        .btn-primary { background-color: #3498db; }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            font-size: 0.9em;
+        }
+        .form-group input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            font-size: 1em;
+            box-sizing: border-box;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .form-group input:focus {
+            outline: none;
+            border-color: #3498db;
+            box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
+        }
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .checkbox-group input {
+            margin-right: 10px;
+        }
+
+        #language-selector {
+            background-color: var(--sidebar-bg);
+            color: white;
+            border: 1px solid var(--border-color);
+            border-radius: 5px;
+            padding: 5px;
+            margin-left: 15px;
+            font-family: inherit;
+            cursor: pointer;
+        }
+
+        #mic-btn {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 1.5em;
+            cursor: pointer;
+            margin-left: 15px;
+        }
+        #mic-btn.listening {
+            color: #e74c3c;
+            animation: pulse 1.5s infinite;
+        }
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.2); }
+            100% { transform: scale(1); }
+        }
+
+        #gesture-indicator {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            font-size: 3em;
+            opacity: 0;
+            transition: opacity 0.5s, transform 0.5s;
+        }
+
+        .sidebar-toggle, #theme-toggle {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 1.5em;
+            cursor: pointer;
+            margin-right: 15px;
+        }
+
+        #theme-toggle {
+            margin-right: 0;
+            margin-left: 15px;
+        }
+
+       
+
+        .nav-icon {
+            margin-right: 10px;
+            font-size: 1.1em;
+        }
+
+        body.sidebar-collapsed .sidebar .nav-icon {
+            margin-right: 0;
+        }
+
+        body.sidebar-collapsed .sidebar a span:not(.nav-icon) {
+            display: none;
+        }
+
+        /* Responsive Styles */
+        @media (max-width: 768px) {
+            .main-container {
+                flex-direction: column;
+            }
+            .sidebar {
+                position: fixed;
+                left: 0;
+                top: 0;
+                height: 100%;
+                transform: translateX(-100%);
+                z-index: 1001;
+            }
+            .sidebar.open {
+                transform: translateX(0);
+            }
+            .sidebar-toggle {
+                display: block; /* Shown on mobile */
+            }
+            .content {
+                padding: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <script>
+        // Protect this page: if the user is not logged in, redirect to login.html
+        if (sessionStorage.getItem('isLoggedIn') !== 'true') {
+            window.location.href = 'login.html';
+        }
+    </script>
+
+    <div class="header">
+        <div class="header-left">
+            <button class="sidebar-toggle" id="sidebar-toggle">☰</button>
+            <div class="logo" data-translate="app_title">Co-Live Hub</div>
+        </div>
+        <div style="display: flex; align-items: center;">
+            <span id="username-display" data-translate="welcome_message">Welcome, Alex!</span>
+            <button id="theme-toggle">🌙</button>
+            <button id="mic-btn">🎤</button>
+            <select id="language-selector">
+                <option value="en">English</option>
+                <option value="es">Español</option>
+                <option value="hi">हिन्दी</option>
+                <option value="te">తెలుగు</option>
+            </select>
+        </div>
+    </div>
+
+    <!-- Hidden video element for gesture detection -->
+    <video id="gesture-video" style="display: none;"></video>
+    <div id="gesture-indicator"></div>
+
+    <div class="main-container">
+        <nav class="sidebar" id="sidebar">
+            <ul>
+                <li><a href="dashboard.html"><span class="nav-icon">📊</span><span data-translate="nav_dashboard">Dashboard</span></a></li>
+                <li><a href="ai-assistant.html"><span class="nav-icon">🤖</span><span data-translate="nav_ai_assistant">AI Assistant</span></a></li>
+                <li><a href="expense-tracker.html"><span class="nav-icon">🧾</span><span data-translate="nav_expense_tracker">Expense Tracker</span></a></li>
+                <li><a href="rent-bills.html"><span class="nav-icon">💰</span><span data-translate="nav_rent_bills">Rent & Bills</span></a></li>
+                <li><a href="chore-schedule.html"><span class="nav-icon">🧹</span><span data-translate="nav_chore_schedule">Chore Schedule</span></a></li>
+                <li><a href="guest-log.html"><span class="nav-icon">👥</span><span data-translate="nav_guest_log">Guest Log</span></a></li>
+                <li><a href="maintenance.html"><span class="nav-icon">🔧</span><span data-translate="nav_maintenance">Maintenance</span></a></li>
+                <li><a href="settings.html" class="active"><span class="nav-icon">⚙️</span><span data-translate="nav_settings">Settings</span></a></li>
+                <li><a href="logout.html"><span class="nav-icon">🚪</span><span data-translate="nav_logout">Logout</span></a></li>
+            </ul>
+        </nav>
+
+        <main class="content">
+            <div class="widget">
+                <h2 data-translate="profile_settings_title">Profile Settings</h2>
+                <form>
+                    <div class="form-group">
+                        <label for="full-name" data-translate="form_full_name">Full Name</label>
+                        <input type="text" id="full-name" name="full-name" placeholder="" value="Alex">
+                    </div>
+                    <div class="form-group">
+                        <label for="email" data-translate="form_email">Email Address</label>
+                        <input type="email" id="email" name="email" placeholder="alex@example.com">
+                    </div>
+                    <div class="form-group">
+                        <label for="password" data-translate="form_change_password">Change Password</label>
+                        <input type="password" id="password" name="password" placeholder="Enter new password">
+                    </div>
+                    <button type="submit" class="btn btn-primary" data-translate="form_save_profile_button">Save Profile</button>
+                </form>
+            </div>
+
+            <div class="widget">
+                <h2 data-translate="notifications_title">Notification Preferences</h2>
+                <form>
+                    <p data-translate="notifications_description">Choose how you receive alerts.</p>
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="notify-bills" name="notify-bills" checked>
+                        <label for="notify-bills">Email me for bill reminders</label>
+                    </div>
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="notify-chores" name="notify-chores" checked>
+                        <label for="notify-chores">Email me for new chore assignments</label>
+                    </div>
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="notify-guests" name="notify-guests">
+                        <label for="notify-guests">Notify me when a guest is registered</label>
+                    </div>
+                    <button type="submit" class="btn btn-primary" data-translate="form_save_preferences_button">Save Preferences</button>
+                </form>
+            </div>
+
+            <div class="widget">
+                <h2 data-translate="payment_settings_title">Payment Settings</h2>
+                <p data-translate="payment_settings_description">Connect your account to a payment provider to easily pay bills.</p>
+                <a href="#" class="btn btn-primary">Connect with Stripe</a>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        // --- Shared Sidebar & Theme Logic ---
+        const sidebarToggle = document.getElementById('sidebar-toggle');
+        const sidebar = document.getElementById('sidebar');
+        const themeToggle = document.getElementById('theme-toggle');
+        const langSelector = document.getElementById('language-selector');
+
+        const translations = {
+            en: {
+                settings_title: "Settings - Co-Live Hub",
+                app_title: "Co-Live Hub",
+                welcome_message: "Welcome, {username}!",
+                nav_dashboard: "Dashboard",
+                nav_rent_bills: "Rent & Bills",
+                nav_ai_assistant: "AI Assistant",
+                nav_chore_schedule: "Chore Schedule",
+                nav_guest_log: "Guest Log",
+                nav_maintenance: "Maintenance",
+                nav_settings: "Settings",
+                nav_logout: "Logout",
+                profile_settings_title: "Profile Settings",
+                form_full_name: "Full Name",
+                form_email: "Email Address",
+                form_change_password: "Change Password",
+                form_save_profile_button: "Save Profile",
+                notifications_title: "Notification Preferences",
+                notifications_description: "Choose how you receive alerts.",
+                form_save_preferences_button: "Save Preferences",
+                payment_settings_title: "Payment Settings",
+                payment_settings_description: "Connect your account to a payment provider to easily pay bills.",
+            },
+            es: {
+                settings_title: "Configuración - Co-Live Hub",
+                app_title: "Co-Live Hub",
+                welcome_message: "¡Bienvenido, {username}!",
+                nav_dashboard: "Tablero",
+                nav_rent_bills: "Alquiler y Cuentas",
+                nav_ai_assistant: "Asistente IA",
+                nav_chore_schedule: "Horario de Tareas",
+                nav_guest_log: "Registro de Invitados",
+                nav_maintenance: "Mantenimiento",
+                nav_settings: "Configuración",
+                nav_logout: "Cerrar Sesión",
+                profile_settings_title: "Configuración de Perfil",
+                form_full_name: "Nombre Completo",
+                form_email: "Correo Electrónico",
+                form_change_password: "Cambiar Contraseña",
+                form_save_profile_button: "Guardar Perfil",
+                notifications_title: "Preferencias de Notificación",
+                notifications_description: "Elige cómo recibes las alertas.",
+                form_save_preferences_button: "Guardar Preferencias",
+                payment_settings_title: "Configuración de Pago",
+                payment_settings_description: "Conecta tu cuenta a un proveedor de pagos para pagar facturas fácilmente.",
+            },
+            hi: {
+                settings_title: "सेटिंग्स - को-लिव हब",
+                app_title: "को-लिव हब",
+                welcome_message: "नमस्ते, {username}!",
+                nav_dashboard: "डैशबोर्ड",
+                nav_rent_bills: "किराया और बिल",
+                nav_ai_assistant: "एआई सहायक",
+                nav_chore_schedule: "काम का शेड्यूल",
+                nav_guest_log: "अतिथि लॉग",
+                nav_maintenance: "रखरखाव",
+                nav_settings: "सेटिंग्स",
+                nav_logout: "लॉग आउट",
+                profile_settings_title: "प्रोफ़ाइल सेटिंग्स",
+                form_full_name: "पूरा नाम",
+                form_email: "ईमेल पता",
+                form_change_password: "पासवर्ड बदलें",
+                form_save_profile_button: "प्रोफ़ाइल सहेजें",
+                notifications_title: "अधिसूचना प्राथमिकताएं",
+                notifications_description: "चुनें कि आप अलर्ट कैसे प्राप्त करते हैं।",
+                form_save_preferences_button: "प्राथमिकताएं सहेजें",
+                payment_settings_title: "भुगतान सेटिंग्स",
+                payment_settings_description: "बिल का आसानी से भुगतान करने के लिए अपने खाते को भुगतान प्रदाता से कनेक्ट करें।",
+            }
+            ,
+            te: {
+                settings_title: "సెట్టింగ్‌లు - కో-లివ్ హబ్",
+                app_title: "కో-లివ్ హబ్",
+                welcome_message: "స్వాగతం, {username}!",
+                nav_dashboard: "డాష్‌బోర్డ్",
+                nav_rent_bills: "అద్దె & బిల్లులు",
+                nav_ai_assistant: "AI అసిస్టెంట్",
+                nav_chore_schedule: "పని షెడ్యూల్",
+                nav_guest_log: "అతిథి లాగ్",
+                nav_maintenance: "నిర్వహణ",
+                nav_settings: "సెట్టింగ్‌లు",
+                nav_logout: "లాగ్ అవుట్",
+                profile_settings_title: "ప్రొఫైల్ సెట్టింగ్‌లు",
+                form_full_name: "పూర్తి పేరు",
+                form_email: "ఇమెయిల్ చిరునామా",
+                form_change_password: "పాస్‌వర్డ్ మార్చండి",
+                form_save_profile_button: "ప్రొఫైల్ సేవ్ చేయండి",
+                notifications_title: "నోటిఫికేషన్ ప్రాధాన్యతలు",
+                notifications_description: "మీరు హెచ్చరికలను ఎలా స్వీకరించాలో ఎంచుకోండి.",
+                form_save_preferences_button: "ప్రాధాన్యతలను సేవ్ చేయండి",
+                payment_settings_title: "చెల్లింపు సెట్టింగ్‌లు",
+                payment_settings_description: "సులభంగా బిల్లులు చెల్లించడానికి మీ ఖాతాను చెల్లింపు ప్రదాతకు కనెక్ట్ చేయండి.",
+            }
+        };
+
+        sidebarToggle.addEventListener('click', () => {
+            document.body.classList.toggle('sidebar-collapsed');
+        });
+
+        document.addEventListener('click', (event) => {
+            if (window.innerWidth <= 768 && sidebar.classList.contains('open')) {
+                if (!sidebar.contains(event.target) && !sidebarToggle.contains(event.target)) {
+                    sidebar.classList.remove('open');
+                }
+            }
+        });
+
+        themeToggle.addEventListener('click', () => {
+            document.body.classList.toggle('dark-theme');
+            const isDark = document.body.classList.contains('dark-theme');
+            localStorage.setItem('theme', isDark ? 'dark' : 'light');
+            themeToggle.textContent = isDark ? '☀️' : '🌙';
+        });
+
+        const setLanguage = (lang) => {
+            document.documentElement.lang = lang;
+            localStorage.setItem('language', lang);
+            langSelector.value = lang;
+
+            document.querySelectorAll('[data-translate]').forEach(el => {
+                const key = el.getAttribute('data-translate');
+                let translation = translations[lang][key] || translations['en'][key];
+
+                if (key === 'welcome_message') {
+                    const username = sessionStorage.getItem('username') || 'Alex';
+                    translation = translation.replace('{username}', username);
+                }
+
+                el.textContent = translation;
+            });
+        };
+
+        langSelector.addEventListener('change', (event) => {
+            setLanguage(event.target.value);
+        });
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const savedTheme = localStorage.getItem('theme');
+            if (savedTheme === 'dark') {
+                document.body.classList.add('dark-theme');
+                themeToggle.textContent = '☀️';
+            } else {
+                themeToggle.textContent = '🌙';
+            }
+
+            const savedLang = localStorage.getItem('language') || 'en';
+            setLanguage(savedLang);
+
+            // Set username in header
+            const username = sessionStorage.getItem('username');
+            if (username) {
+                document.getElementById('username-display').textContent = `Welcome, ${username}!`;
+            }
+            initGestureControls();
+        });
+
+        // --- Voice Navigation Logic ---
+        const micBtn = document.getElementById('mic-btn');
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+        if (SpeechRecognition) {
+            const recognition = new SpeechRecognition();
+
+            micBtn.addEventListener('click', () => {
+                micBtn.classList.contains('listening') ? recognition.stop() : recognition.start();
+            });
+
+            recognition.onstart = () => micBtn.classList.add('listening');
+            recognition.onend = () => micBtn.classList.remove('listening');
+
+            recognition.onresult = (event) => {
+                const transcript = event.results[0][0].transcript.toLowerCase().trim();
+                handleVoiceCommand(transcript);
+            };
+
+            const handleVoiceCommand = (command) => {
+                const navCommands = {
+                    'dashboard': 'dashboard.html', 'rent': 'rent-bills.html', 'bills': 'rent-bills.html',
+                    'chores': 'chore-schedule.html', 'schedule': 'chore-schedule.html', 'expense': 'expense-tracker.html',
+                    'tracker': 'expense-tracker.html', 'assistant': 'ai-assistant.html', 'guest': 'guest-log.html',
+                    'maintenance': 'maintenance.html', 'settings': 'settings.html'
+                };
+                for (const key in navCommands) {
+                    if (command.startsWith(key) || command.startsWith(`go to ${key}`)) {
+                        window.location.href = navCommands[key];
+                        return;
+                    }
+                }
+                alert(`Command not recognized: "${command}"`);
+            };
+        } else {
+            micBtn.style.display = 'none';
+            console.log('Speech recognition not supported in this browser.');
+        };
+
+        // --- Hand Gesture Logic ---
+        async function initGestureControls() {
+            const video = document.getElementById('gesture-video');
+            const indicator = document.getElementById('gesture-indicator');
+            let model, gestureEstimator, lastGesture = null, gestureTimeout;
+
+            const showIndicator = (gesture) => {
+                indicator.textContent = gesture;
+                indicator.style.opacity = 1;
+                clearTimeout(gestureTimeout);
+                gestureTimeout = setTimeout(() => {
+                    indicator.style.opacity = 0;
+                }, 1500);
+            };
+
+            const { GestureDescription, Finger, FingerCurl } = window.fp;
+
+            const openPalmGesture = new GestureDescription('open_palm');
+            for(let finger of [Finger.Thumb, Finger.Index, Finger.Middle, Finger.Ring, Finger.Pinky]) { openPalmGesture.addCurl(finger, FingerCurl.NoCurl, 1.0); }
+
+            const victoryGesture = new GestureDescription('victory');
+            victoryGesture.addCurl(Finger.Index, FingerCurl.NoCurl, 1.0); victoryGesture.addCurl(Finger.Middle, FingerCurl.NoCurl, 1.0);
+            victoryGesture.addCurl(Finger.Thumb, FingerCurl.HalfCurl, 0.5); victoryGesture.addCurl(Finger.Ring, FingerCurl.FullCurl, 1.0); victoryGesture.addCurl(Finger.Pinky, FingerCurl.FullCurl, 1.0);
+
+            const iLoveYouGesture = new GestureDescription('i_love_you');
+            iLoveYouGesture.addCurl(Finger.Thumb, FingerCurl.NoCurl, 1.0); iLoveYouGesture.addCurl(Finger.Index, FingerCurl.NoCurl, 1.0); iLoveYouGesture.addCurl(Finger.Pinky, FingerCurl.NoCurl, 1.0);
+            iLoveYouGesture.addCurl(Finger.Middle, FingerCurl.FullCurl, 1.0); iLoveYouGesture.addCurl(Finger.Ring, FingerCurl.FullCurl, 1.0);
+
+            const pointingUpGesture = new GestureDescription('pointing_up');
+            pointingUpGesture.addCurl(Finger.Index, FingerCurl.NoCurl, 1.0); pointingUpGesture.addCurl(Finger.Thumb, FingerCurl.HalfCurl, 0.8);
+            for(let finger of [Finger.Middle, Finger.Ring, Finger.Pinky]) { pointingUpGesture.addCurl(finger, FingerCurl.FullCurl, 1.0); }
+
+            const threeFingersUpGesture = new GestureDescription('three_fingers_up');
+            threeFingersUpGesture.addCurl(Finger.Index, FingerCurl.NoCurl, 1.0); threeFingersUpGesture.addCurl(Finger.Middle, FingerCurl.NoCurl, 1.0); threeFingersUpGesture.addCurl(Finger.Ring, FingerCurl.NoCurl, 1.0);
+            threeFingersUpGesture.addCurl(Finger.Thumb, FingerCurl.FullCurl, 1.0); threeFingersUpGesture.addCurl(Finger.Pinky, FingerCurl.FullCurl, 1.0);
+
+            const knownGestures = [openPalmGesture, victoryGesture, iLoveYouGesture, pointingUpGesture, threeFingersUpGesture];
+            gestureEstimator = new window.fp.GestureEstimator(knownGestures);
+
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                video.srcObject = stream;
+                video.play();
+                model = await handpose.load();
+                setInterval(predictGestures, 200);
+            } catch (err) {
+                console.error("Error accessing webcam or loading model:", err);
+            }
+
+            async function predictGestures() {
+                const predictions = await model.estimateHands(video);
+                if (predictions.length > 0) {
+                    const estimatedGestures = gestureEstimator.estimate(predictions[0].landmarks, 8.5);
+                    if (estimatedGestures.gestures.length > 0) {
+                        const bestGesture = estimatedGestures.gestures[0];
+                        if (bestGesture.name !== lastGesture) {
+                            lastGesture = bestGesture.name;
+                            handleGestureAction(bestGesture.name);
+                        }
+                    }
+                } else { lastGesture = null; }
+            }
+
+            function handleGestureAction(gestureName) {
+                const navLinks = Array.from(document.querySelectorAll('.sidebar a'));
+                const activeIndex = navLinks.findIndex(link => link.classList.contains('active'));
+                if (gestureName === 'victory') { showIndicator('✌️'); const nextIndex = (activeIndex + 1) % navLinks.length; window.location.href = navLinks[nextIndex].href; }
+                else if (gestureName === 'open_palm') { showIndicator('🖐️'); const prevIndex = (activeIndex - 1 + navLinks.length) % navLinks.length; window.location.href = navLinks[prevIndex].href; }
+                else if (gestureName === 'pointing_up') { showIndicator('☝️'); document.getElementById('mic-btn').click(); }
+                else if (gestureName === 'three_fingers_up') { showIndicator('👌'); document.body.classList.toggle('sidebar-collapsed'); }
+                else if (gestureName === 'i_love_you') { showIndicator('🤟'); document.getElementById('theme-toggle').click(); }
+            }
+        }
+    </script>
+
+</body>
+</html>
